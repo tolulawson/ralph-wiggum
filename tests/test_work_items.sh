@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/lib/test_helpers.sh"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 source "$SCRIPT_DIR/../scripts/lib/work_items.sh"
+source "$SCRIPT_DIR/../scripts/lib/runtime_helpers.sh"
 source "$SCRIPT_DIR/../scripts/lib/release_workflow.sh"
 
 # Helper: write a minimal work-items.json
@@ -203,7 +204,7 @@ assert_contains "rendered context includes testing line" "- testing:" "$rendered
 
 # ── merge_work_item_release ──────────────────────────────────────────────────
 
-suite "merge_work_item_release"
+suite "merge_work_item_release requires PR automation"
 
 TMPDIR_REPO=$(make_tmpdir)
 git -C "$TMPDIR_REPO" init -b main >/dev/null 2>&1
@@ -217,13 +218,13 @@ printf 'task\n' >> "$TMPDIR_REPO/note.txt"
 git -C "$TMPDIR_REPO" commit -am "task work" >/dev/null 2>&1
 
 merge_work_item_release "$TMPDIR_REPO" "task-1" "ralph/task-1"
-assert_true "local merge fallback succeeds" "$?"
+assert_false "release does not merge locally without PR automation" "$?"
 
 current_branch=$(git -C "$TMPDIR_REPO" branch --show-current)
-assert_equals "returns to base branch" "main" "$current_branch"
+assert_equals "stays on task branch when release cannot proceed" "ralph/task-1" "$current_branch"
 
 git -C "$TMPDIR_REPO" merge-base --is-ancestor "ralph/task-1" "main"
-assert_true "task branch is merged into main" "$?"
+assert_false "task branch is not merged into main automatically" "$?"
 
 # ── worktree_is_clean / branch switching hygiene ──────────────────────────────
 
@@ -253,5 +254,45 @@ printf 'changed\n' >> "$TMPDIR_REPO2/note.txt"
 
 worktree_is_clean "$TMPDIR_REPO2"
 assert_false "tracked modifications make worktree dirty" "$?"
+
+# ── perform_work_item_release resumes blocked remote release ──────────────────
+
+suite "perform_work_item_release resumes blocked remote release"
+
+gh_pr_ready() {
+    return 1
+}
+
+ensure_draft_pull_request() {
+    return 2
+}
+
+TMPDIR_REMOTE=$(make_tmpdir)
+TMPDIR_REPO3=$(make_tmpdir)
+git -C "$TMPDIR_REMOTE" init --bare origin.git >/dev/null 2>&1
+git -C "$TMPDIR_REPO3" init -b main >/dev/null 2>&1
+git -C "$TMPDIR_REPO3" config user.name "Test User"
+git -C "$TMPDIR_REPO3" config user.email "test@example.com"
+git -C "$TMPDIR_REPO3" remote add origin "$TMPDIR_REMOTE/origin.git"
+printf 'base\n' > "$TMPDIR_REPO3/note.txt"
+git -C "$TMPDIR_REPO3" add note.txt
+git -C "$TMPDIR_REPO3" commit -m "base" >/dev/null 2>&1
+git -C "$TMPDIR_REPO3" push -u origin main >/dev/null 2>&1
+git -C "$TMPDIR_REPO3" switch -c "ralph/task-3" >/dev/null 2>&1
+printf 'task\n' >> "$TMPDIR_REPO3/note.txt"
+git -C "$TMPDIR_REPO3" commit -am "task work" >/dev/null 2>&1
+git -C "$TMPDIR_REPO3" switch main >/dev/null 2>&1
+git -C "$TMPDIR_REPO3" merge --no-ff --no-edit "ralph/task-3" >/dev/null 2>&1
+
+perform_work_item_release "$TMPDIR_REPO3" "task-3" "ralph/task-3" "Third task" "specs/task-3/spec.md" "" "" ""
+assert_false "release retry remains pending when PR automation is unavailable" "$?"
+assert_equals "release result marked awaiting_merge" "awaiting_merge" "$RELEASE_RESULT_STATUS"
+
+remote_main_rev=$(git --git-dir="$TMPDIR_REMOTE/origin.git" rev-parse refs/heads/main)
+local_main_rev=$(git -C "$TMPDIR_REPO3" rev-parse main)
+assert_not_equals "remote main is not advanced automatically" "$local_main_rev" "$remote_main_rev"
+
+git --git-dir="$TMPDIR_REMOTE/origin.git" show-ref --verify --quiet refs/heads/ralph/task-3
+assert_true "task branch is pushed during release retry" "$?"
 
 print_test_summary

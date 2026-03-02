@@ -39,6 +39,7 @@ mkdir -p "$LOG_DIR"
 source "$SCRIPT_DIR/lib/prompt_builder.sh"
 source "$SCRIPT_DIR/lib/runtime_helpers.sh"
 source "$SCRIPT_DIR/lib/work_items.sh"
+source "$SCRIPT_DIR/lib/spec_queue.sh"
 source "$SCRIPT_DIR/lib/release_workflow.sh"
 source "$SCRIPT_DIR/lib/provider_adapters.sh"
 source "$SCRIPT_DIR/lib/preflight.sh"
@@ -309,6 +310,7 @@ while true; do
     WATCH_PID=""
     ITERATION_PROMPT_FILE="$BASE_PROMPT_FILE"
     reset_active_work_item
+    reset_active_spec
 
     # Stuck-loop protection: halt if circuit breaker is open
     if ! can_execute; then
@@ -317,37 +319,77 @@ while true; do
         exit $EXIT_PROVIDER_ERROR
     fi
 
-    if [[ "$MODE" = "build" && "$HAS_WORK_ITEMS" = true ]]; then
-        reconcile_merged_pull_requests "$PROJECT_DIR"
+    if [[ "$MODE" = "build" ]]; then
+        if [[ "$HAS_WORK_ITEMS" = true ]]; then
+            reconcile_merged_pull_requests "$PROJECT_DIR"
 
-        if find_awaiting_merge_item "$PROJECT_DIR"; then
-            if merge_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER"; then
-                mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
-                echo -e "${GREEN}✓ Automatically merged pending work item '$ACTIVE_WORK_ITEM_ID'.${NC}"
-                reset_active_work_item
-            else
-                echo -e "${YELLOW}Warning: automatic merge is still blocked for '$ACTIVE_WORK_ITEM_ID'.${NC}"
-                print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
-                exit $EXIT_AWAITING_MERGE
+            if find_awaiting_merge_item "$PROJECT_DIR"; then
+                if perform_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_TITLE" "$ACTIVE_WORK_ITEM_SPEC" "$ACTIVE_WORK_ITEM_TASKS" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL"; then
+                    mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                    echo -e "${GREEN}✓ Automatically merged pending work item '$ACTIVE_WORK_ITEM_ID'.${NC}"
+                    reset_active_work_item
+                else
+                    echo -e "${YELLOW}Warning: automatic merge is still blocked for '$ACTIVE_WORK_ITEM_ID'.${NC}"
+                    mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$RELEASE_RESULT_PR_URL" "$RELEASE_RESULT_PR_NUMBER"
+                    print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$RELEASE_RESULT_PR_NUMBER" "$RELEASE_RESULT_PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
+                    exit $EXIT_AWAITING_MERGE
+                fi
             fi
-        fi
 
-        if select_next_work_item "$PROJECT_DIR"; then
-            ACTIVE_WORK_ITEM_BRANCH=$(ensure_work_item_branch "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH") || exit 1
-            mark_work_item_in_progress "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH"
-            set_active_work_item_by_id "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" || true
+            if select_next_work_item "$PROJECT_DIR"; then
+                WORK_BRANCH_HINT="$ACTIVE_WORK_ITEM_BRANCH"
+                BASE_BRANCH_NAME=$(detect_base_branch "$PROJECT_DIR")
+                if [[ "$WORK_BRANCH_HINT" = "$BASE_BRANCH_NAME" ]]; then
+                    WORK_BRANCH_HINT=""
+                fi
 
-            ITERATION_PROMPT_FILE="$LOG_DIR/${RUNTIME_ITER_PREFIX}_${MODE}_prompt_${ITERATION}_$(date '+%Y%m%d_%H%M%S').md"
-            cp "$BASE_PROMPT_FILE" "$ITERATION_PROMPT_FILE"
-            render_active_work_item_context >> "$ITERATION_PROMPT_FILE"
+                ACTIVE_WORK_ITEM_BRANCH=$(derive_work_branch_name "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_SPEC" "$WORK_BRANCH_HINT")
+                ACTIVE_WORK_ITEM_BRANCH=$(ensure_work_item_branch "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH") || exit 1
+                mark_work_item_in_progress "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH"
+                set_active_work_item_by_id "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" || true
 
-            CURRENT_BRANCH="$ACTIVE_WORK_ITEM_BRANCH"
-            echo -e "${BLUE}Work item:${NC} $ACTIVE_WORK_ITEM_ID — $ACTIVE_WORK_ITEM_TITLE"
-            echo -e "${BLUE}Task branch:${NC} $ACTIVE_WORK_ITEM_BRANCH"
-            echo ""
+                ITERATION_PROMPT_FILE="$LOG_DIR/${RUNTIME_ITER_PREFIX}_${MODE}_prompt_${ITERATION}_$(date '+%Y%m%d_%H%M%S').md"
+                cp "$BASE_PROMPT_FILE" "$ITERATION_PROMPT_FILE"
+                render_active_work_item_context >> "$ITERATION_PROMPT_FILE"
+
+                CURRENT_BRANCH="$ACTIVE_WORK_ITEM_BRANCH"
+                echo -e "${BLUE}Work item:${NC} $ACTIVE_WORK_ITEM_ID — $ACTIVE_WORK_ITEM_TITLE"
+                echo -e "${BLUE}Task branch:${NC} $ACTIVE_WORK_ITEM_BRANCH"
+                echo ""
+            else
+                echo -e "${GREEN}All work-items are complete.${NC}"
+                break
+            fi
         else
-            echo -e "${GREEN}All work-items are complete.${NC}"
-            break
+            if load_pending_spec_release "$PROJECT_DIR"; then
+                if perform_work_item_release "$PROJECT_DIR" "$ACTIVE_SPEC_ID" "$ACTIVE_SPEC_BRANCH" "$ACTIVE_SPEC_TITLE" "$ACTIVE_SPEC_PATH" "" "$ACTIVE_SPEC_PR_NUMBER" "$ACTIVE_SPEC_PR_URL"; then
+                    clear_pending_spec_release "$PROJECT_DIR"
+                    echo -e "${GREEN}✓ Automatically merged pending spec '$ACTIVE_SPEC_ID'.${NC}"
+                    reset_active_spec
+                else
+                    echo -e "${YELLOW}Warning: automatic merge is still blocked for spec '$ACTIVE_SPEC_ID'.${NC}"
+                    write_pending_spec_release "$PROJECT_DIR" "$ACTIVE_SPEC_ID" "$ACTIVE_SPEC_TITLE" "$ACTIVE_SPEC_PATH" "$ACTIVE_SPEC_BRANCH" "$RELEASE_RESULT_PR_NUMBER" "$RELEASE_RESULT_PR_URL"
+                    print_awaiting_merge_message "$ACTIVE_SPEC_ID" "$ACTIVE_SPEC_BRANCH" "$RELEASE_RESULT_PR_NUMBER" "$RELEASE_RESULT_PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
+                    exit $EXIT_AWAITING_MERGE
+                fi
+            fi
+
+            if select_next_spec "$PROJECT_DIR"; then
+                ACTIVE_SPEC_BRANCH=$(derive_work_branch_name "$ACTIVE_SPEC_ID" "$ACTIVE_SPEC_PATH" "")
+                ACTIVE_SPEC_BRANCH=$(ensure_work_item_branch "$PROJECT_DIR" "$ACTIVE_SPEC_ID" "$ACTIVE_SPEC_BRANCH") || exit 1
+
+                ITERATION_PROMPT_FILE="$LOG_DIR/${RUNTIME_ITER_PREFIX}_${MODE}_prompt_${ITERATION}_$(date '+%Y%m%d_%H%M%S').md"
+                cp "$BASE_PROMPT_FILE" "$ITERATION_PROMPT_FILE"
+                render_active_spec_context >> "$ITERATION_PROMPT_FILE"
+
+                CURRENT_BRANCH="$ACTIVE_SPEC_BRANCH"
+                echo -e "${BLUE}Spec:${NC} $ACTIVE_SPEC_ID — $ACTIVE_SPEC_TITLE"
+                echo -e "${BLUE}Task branch:${NC} $ACTIVE_SPEC_BRANCH"
+                echo ""
+            else
+                echo -e "${GREEN}All specs are complete.${NC}"
+                break
+            fi
         fi
     fi
 
@@ -404,39 +446,36 @@ while true; do
 
             if [[ "$MODE" = "build" ]]; then
                 RELEASE_BRANCH=$(git branch --show-current 2>/dev/null || echo "$CURRENT_BRANCH")
-                push_branch_if_needed "$RELEASE_BRANCH"
 
                 if [[ -n "$ACTIVE_WORK_ITEM_ID" ]]; then
-                    PR_TITLE=$(build_pull_request_title "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_TITLE")
-                    PR_BODY=$(build_pull_request_body "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_TITLE" "$ACTIVE_WORK_ITEM_SPEC" "$ACTIVE_WORK_ITEM_TASKS")
-
-                    PR_INFO=""
-                    if PR_INFO=$(ensure_draft_pull_request "$PROJECT_DIR" "$RELEASE_BRANCH" "$PR_TITLE" "$PR_BODY"); then
-                        IFS=$'\t' read -r PR_NUMBER PR_URL PR_STATUS <<< "$PR_INFO"
-                        if [[ "$PR_STATUS" = "merged" ]]; then
-                            sync_local_base_branch "$PROJECT_DIR" || true
-                            mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
-                            echo -e "${GREEN}✓ Pull request for $ACTIVE_WORK_ITEM_ID is already merged.${NC}"
-                        elif merge_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER"; then
-                            mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                    if perform_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$ACTIVE_WORK_ITEM_TITLE" "$ACTIVE_WORK_ITEM_SPEC" "$ACTIVE_WORK_ITEM_TASKS" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL"; then
+                        mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                        if [[ -n "$RELEASE_RESULT_PR_NUMBER" ]]; then
                             echo -e "${GREEN}✓ Pull request for $ACTIVE_WORK_ITEM_ID merged automatically.${NC}"
                         else
-                            mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_URL" "$PR_NUMBER"
-                            echo -e "${YELLOW}Warning: automatic merge is blocked for '$ACTIVE_WORK_ITEM_ID'.${NC}"
-                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER" "$PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
-                            exit $EXIT_AWAITING_MERGE
+                            echo -e "${GREEN}✓ Work item $ACTIVE_WORK_ITEM_ID merged directly without a PR.${NC}"
                         fi
                     else
-                        if merge_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"; then
-                            mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
-                            echo -e "${GREEN}✓ Work item $ACTIVE_WORK_ITEM_ID merged directly without a PR.${NC}"
+                        echo -e "${YELLOW}Warning: could not complete the automatic release workflow for '$ACTIVE_WORK_ITEM_ID'.${NC}"
+                        echo -e "${YELLOW}Ralph will keep this item in awaiting_merge and retry on the next run.${NC}"
+                        mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$RELEASE_RESULT_PR_URL" "$RELEASE_RESULT_PR_NUMBER"
+                        print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$RELEASE_RESULT_PR_NUMBER" "$RELEASE_RESULT_PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
+                        exit $EXIT_AWAITING_MERGE
+                    fi
+                elif [[ -n "$ACTIVE_SPEC_ID" ]]; then
+                    if perform_work_item_release "$PROJECT_DIR" "$ACTIVE_SPEC_ID" "$RELEASE_BRANCH" "$ACTIVE_SPEC_TITLE" "$ACTIVE_SPEC_PATH" "" "$ACTIVE_SPEC_PR_NUMBER" "$ACTIVE_SPEC_PR_URL"; then
+                        clear_pending_spec_release "$PROJECT_DIR"
+                        if [[ -n "$RELEASE_RESULT_PR_NUMBER" ]]; then
+                            echo -e "${GREEN}✓ Pull request for $ACTIVE_SPEC_ID merged automatically.${NC}"
                         else
-                            echo -e "${YELLOW}Warning: could not create a draft pull request or complete an automatic merge.${NC}"
-                            echo -e "${YELLOW}The branch has been pushed. Merge manually, then rerun the loop from the base branch.${NC}"
-                            mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
-                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "" "" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
-                            exit $EXIT_AWAITING_MERGE
+                            echo -e "${GREEN}✓ Spec $ACTIVE_SPEC_ID merged directly without a PR.${NC}"
                         fi
+                    else
+                        echo -e "${YELLOW}Warning: could not complete the automatic release workflow for spec '$ACTIVE_SPEC_ID'.${NC}"
+                        echo -e "${YELLOW}Ralph will keep this spec in awaiting_merge and retry on the next run.${NC}"
+                        write_pending_spec_release "$PROJECT_DIR" "$ACTIVE_SPEC_ID" "$ACTIVE_SPEC_TITLE" "$ACTIVE_SPEC_PATH" "$RELEASE_BRANCH" "$RELEASE_RESULT_PR_NUMBER" "$RELEASE_RESULT_PR_URL"
+                        print_awaiting_merge_message "$ACTIVE_SPEC_ID" "$RELEASE_BRANCH" "$RELEASE_RESULT_PR_NUMBER" "$RELEASE_RESULT_PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
+                        exit $EXIT_AWAITING_MERGE
                     fi
                 fi
             fi

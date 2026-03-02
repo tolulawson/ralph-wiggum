@@ -4,6 +4,9 @@
 #
 
 RALPH_BASE_BRANCH="${RALPH_BASE_BRANCH:-main}"
+RELEASE_RESULT_STATUS=""
+RELEASE_RESULT_PR_NUMBER=""
+RELEASE_RESULT_PR_URL=""
 
 detect_base_branch() {
     local project_dir="$1"
@@ -21,6 +24,70 @@ detect_base_branch() {
     fi
 
     echo "$RALPH_BASE_BRANCH"
+}
+
+sanitize_branch_component() {
+    local value="$1"
+
+    value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    value=$(printf '%s' "$value" | sed 's/[^a-z0-9._-]/-/g')
+    value=$(printf '%s' "$value" | sed 's/--*/-/g; s/^-//; s/-$//')
+    printf '%s' "$value"
+}
+
+spec_branch_component_from_path() {
+    local spec_path="$1"
+    local relative=""
+    local parent_name=""
+    local file_name=""
+
+    [[ -n "$spec_path" ]] || return 1
+
+    relative="${spec_path#*specs/}"
+    if [[ "$relative" = "$spec_path" ]]; then
+        relative=$(basename "$spec_path")
+    fi
+
+    file_name=$(basename "$relative")
+    if [[ "$file_name" = "spec.md" ]]; then
+        parent_name=$(basename "$(dirname "$relative")")
+        sanitize_branch_component "$parent_name"
+        return 0
+    fi
+
+    sanitize_branch_component "${file_name%.md}"
+}
+
+derive_work_branch_name() {
+    local item_id="$1"
+    local spec_path="${2:-}"
+    local branch_hint="${3:-}"
+    local spec_component=""
+    local item_component=""
+
+    if [[ -n "$branch_hint" ]]; then
+        echo "$branch_hint"
+        return 0
+    fi
+
+    spec_component=$(spec_branch_component_from_path "$spec_path" 2>/dev/null || true)
+    item_component=$(sanitize_branch_component "$item_id")
+
+    if [[ -n "$spec_component" ]]; then
+        if [[ -n "$item_component" && "$item_component" != "$spec_component" ]]; then
+            echo "ralph/${spec_component}--${item_component}"
+        else
+            echo "ralph/${spec_component}"
+        fi
+        return 0
+    fi
+
+    if [[ -n "$item_component" ]]; then
+        echo "ralph/${item_component}"
+        return 0
+    fi
+
+    echo ""
 }
 
 worktree_is_clean() {
@@ -42,7 +109,7 @@ ensure_work_item_branch() {
 
     base_branch=$(detect_base_branch "$project_dir")
     current_branch=$(git -C "$project_dir" branch --show-current 2>/dev/null || echo "$base_branch")
-    target_branch="${branch_hint:-ralph/${item_id}}"
+    target_branch=$(derive_work_branch_name "$item_id" "" "$branch_hint")
 
     if [[ "$current_branch" = "$target_branch" ]]; then
         echo "$target_branch"
@@ -170,42 +237,78 @@ merge_work_item_release() {
     local branch="$3"
     local pr_number="${4:-}"
 
-    local base_branch
-    base_branch=$(detect_base_branch "$project_dir")
-
     if [[ -n "$pr_number" ]] && gh_pr_ready; then
         if (cd "$project_dir" && gh pr merge "$pr_number" --merge --delete-branch=false) >/dev/null 2>&1; then
             sync_local_base_branch "$project_dir" || return 1
-            if [[ -n "$branch" ]] && git -C "$project_dir" merge-base --is-ancestor "$branch" "$base_branch" 2>/dev/null; then
-                return 0
-            fi
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+reset_release_result() {
+    RELEASE_RESULT_STATUS=""
+    RELEASE_RESULT_PR_NUMBER=""
+    RELEASE_RESULT_PR_URL=""
+}
+
+perform_work_item_release() {
+    local project_dir="$1"
+    local item_id="$2"
+    local branch="$3"
+    local item_title="${4:-}"
+    local item_spec="${5:-}"
+    local item_tasks="${6:-}"
+    local existing_pr_number="${7:-}"
+    local existing_pr_url="${8:-}"
+
+    reset_release_result
+    RELEASE_RESULT_PR_NUMBER="$existing_pr_number"
+    RELEASE_RESULT_PR_URL="$existing_pr_url"
+
+    if [[ -n "$branch" ]] && declare -F push_branch_if_needed >/dev/null 2>&1; then
+        if ! push_branch_if_needed "$branch" "$project_dir"; then
+            RELEASE_RESULT_STATUS="awaiting_merge"
             return 1
         fi
     fi
 
-    if [[ -z "$branch" ]]; then
+    local pr_title
+    local pr_body
+    local pr_info=""
+    local pr_number=""
+    local pr_url=""
+    local pr_status=""
+
+    pr_title=$(build_pull_request_title "$item_id" "$item_title")
+    pr_body=$(build_pull_request_body "$item_id" "$item_title" "$item_spec" "$item_tasks")
+
+    if pr_info=$(ensure_draft_pull_request "$project_dir" "$branch" "$pr_title" "$pr_body"); then
+        IFS=$'\t' read -r pr_number pr_url pr_status <<< "$pr_info"
+        RELEASE_RESULT_PR_NUMBER="$pr_number"
+        RELEASE_RESULT_PR_URL="$pr_url"
+
+        if [[ "$pr_status" = "merged" ]]; then
+            sync_local_base_branch "$project_dir" || {
+                RELEASE_RESULT_STATUS="awaiting_merge"
+                return 1
+            }
+            RELEASE_RESULT_STATUS="merged"
+            return 0
+        fi
+
+        if merge_work_item_release "$project_dir" "$item_id" "$branch" "$pr_number"; then
+            RELEASE_RESULT_STATUS="merged"
+            return 0
+        fi
+
+        RELEASE_RESULT_STATUS="awaiting_merge"
         return 1
     fi
 
-    if ! git -C "$project_dir" show-ref --verify --quiet "refs/heads/$branch"; then
-        return 1
-    fi
-
-    if ! sync_local_base_branch "$project_dir"; then
-        return 1
-    fi
-
-    if git -C "$project_dir" merge-base --is-ancestor "$branch" "$base_branch" 2>/dev/null; then
-        return 0
-    fi
-
-    git -C "$project_dir" merge --no-ff --no-edit "$branch" >/dev/null 2>&1 || return 1
-
-    if git_remote_branch_exists "$project_dir" "$base_branch"; then
-        git -C "$project_dir" push origin "$base_branch" >/dev/null 2>&1 || return 1
-    fi
-
-    return 0
+    RELEASE_RESULT_STATUS="awaiting_merge"
+    return 1
 }
 
 print_awaiting_merge_message() {

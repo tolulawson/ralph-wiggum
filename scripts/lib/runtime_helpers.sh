@@ -106,14 +106,34 @@ print_decide_signal() {
 
 push_branch_if_needed() {
     local branch="$1"
+    local project_dir="${2:-$(pwd)}"
+    local current_branch=""
 
-    git push origin "$branch" 2>/dev/null || {
-        if ! git rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
-            echo -e "${YELLOW}Push failed, creating remote branch...${NC}"
-            git push -u origin "$branch" 2>/dev/null || true
-        elif git log "origin/$branch"..HEAD --oneline 2>/dev/null | grep -q .; then
-            echo -e "${YELLOW}Push failed, creating remote branch...${NC}"
-            git push -u origin "$branch" 2>/dev/null || true
+    current_branch=$(git -C "$project_dir" branch --show-current 2>/dev/null || true)
+
+    if git -C "$project_dir" push origin "$branch:$branch" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if ! git -C "$project_dir" rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Push failed, creating remote branch...${NC}"
+        if [[ "$current_branch" = "$branch" ]]; then
+            git -C "$project_dir" push -u origin "$branch:$branch" >/dev/null 2>&1
+        else
+            git -C "$project_dir" push origin "$branch:$branch" >/dev/null 2>&1
         fi
-    }
+        return $?
+    fi
+
+    if git -C "$project_dir" log "origin/$branch..$branch" --oneline 2>/dev/null | grep -q .; then
+        echo -e "${YELLOW}Push failed, retrying with upstream tracking...${NC}"
+        if [[ "$current_branch" = "$branch" ]]; then
+            git -C "$project_dir" push -u origin "$branch:$branch" >/dev/null 2>&1
+        else
+            git -C "$project_dir" push origin "$branch:$branch" >/dev/null 2>&1
+        fi
+        return $?
+    fi
+
+    return 1
 }
