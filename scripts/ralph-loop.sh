@@ -256,10 +256,12 @@ fi
 
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
 
+HAS_WORK_ITEMS=false
 HAS_PLAN=false
 HAS_SPECS=false
 HAS_AGENTS=false
 SPEC_COUNT=0
+[ -f "work-items.json" ] && HAS_WORK_ITEMS=true
 [ -f "IMPLEMENTATION_PLAN.md" ] && HAS_PLAN=true
 [ -f "AGENTS.md" ] && HAS_AGENTS=true
 if [ -d "specs" ]; then
@@ -294,14 +296,19 @@ else
     echo -e "  ${YELLOW}○${NC} AGENTS.md not found (optional)"
 fi
 echo ""
-echo -e "${BLUE}Work source:${NC}"
-if [ "$HAS_PLAN" = true ]; then
-    echo -e "  ${GREEN}✓${NC} IMPLEMENTATION_PLAN.md"
+echo -e "${BLUE}Work source:${NC} (checked in priority order)"
+if [ "$HAS_WORK_ITEMS" = true ]; then
+    echo -e "  ${GREEN}✓${NC} work-items.json (primary)"
 else
-    echo -e "  ${YELLOW}○${NC} IMPLEMENTATION_PLAN.md (not found, that's OK)"
+    echo -e "  ${YELLOW}○${NC} work-items.json (not found; run plan mode to generate)"
+fi
+if [ "$HAS_PLAN" = true ]; then
+    echo -e "  ${GREEN}✓${NC} IMPLEMENTATION_PLAN.md (fallback)"
+else
+    echo -e "  ${YELLOW}○${NC} IMPLEMENTATION_PLAN.md (not found)"
 fi
 if [ "$HAS_SPECS" = true ]; then
-    echo -e "  ${GREEN}✓${NC} specs/ folder ($SPEC_COUNT specs)"
+    echo -e "  ${GREEN}✓${NC} specs/ folder ($SPEC_COUNT specs) (final fallback)"
 else
     echo -e "  ${RED}✗${NC} specs/ folder (no .md files found)"
 fi

@@ -100,9 +100,11 @@ check_constitution() {
 # Fail if there is no actionable work source (build mode only).
 check_work_source() {
     local project_dir="$1"
+    local has_work_items=false
     local has_plan=false
     local has_specs=false
 
+    [[ -f "$project_dir/work-items.json" ]] && has_work_items=true
     [[ -f "$project_dir/IMPLEMENTATION_PLAN.md" ]] && has_plan=true
 
     if [[ -d "$project_dir/specs" ]]; then
@@ -111,8 +113,8 @@ check_work_source() {
         [[ "$count" -gt 0 ]] && has_specs=true
     fi
 
-    if [[ "$has_plan" = false && "$has_specs" = false ]]; then
-        PREFLIGHT_ERRORS+=("No work source: create specs/*.md files or an IMPLEMENTATION_PLAN.md before running build mode")
+    if [[ "$has_work_items" = false && "$has_plan" = false && "$has_specs" = false ]]; then
+        PREFLIGHT_ERRORS+=("No work source: create specs/*.md files, an IMPLEMENTATION_PLAN.md, or a work-items.json before running build mode")
         return 1
     fi
     return 0

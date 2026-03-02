@@ -342,7 +342,13 @@ $canonical_summary
    - summarizes readiness and dependencies
    - identifies the recommended execution order
    - highlights any clarifications or blockers
-8. Do not implement product code in this mode. Planning artifacts only.
+8. After creating \`IMPLEMENTATION_PLAN.md\`, write \`work-items.json\` at the project
+   root using the schema defined in the planning prompt. Set every item's \`status\`
+   to \`"pending"\` and \`retry_count\` to \`0\`. Derive \`priority\` from spec ordering
+   (001 = priority 1, 002 = priority 2, etc.). Infer \`profile\` from the spec content
+   or constitution; default to \`"unknown"\`. List \`verification\` steps appropriate
+   for the detected profile.
+9. Do not implement product code in this mode. Planning artifacts only.
 
 ## Output Rules
 
