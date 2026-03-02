@@ -237,7 +237,7 @@
 
 ### Plan
 
-- [ ] Update `INSTALLATION.md` so the AI-guided setup flow describes optional notification/logging features accurately under the unified loop.
-- [ ] Update `TELEGRAM_SETUP.md` so it no longer advertises deprecated unified-loop CLI flags.
-- [ ] Reframe Telegram support as helper-library functionality unless the user wires it into a custom loop wrapper.
-- [ ] Verify the setup docs no longer promise removed Telegram loop flags.
+- [x] Update `INSTALLATION.md` so the AI-guided setup flow describes optional notification/logging features accurately under the unified loop.
+- [x] Update `TELEGRAM_SETUP.md` so it no longer advertises deprecated unified-loop CLI flags.
+- [x] Reframe Telegram support as helper-library functionality unless the user wires it into a custom loop wrapper.
+- [x] Verify the setup docs no longer promise removed Telegram loop flags.

@@ -1,6 +1,11 @@
 # Telegram Notifications Setup
 
-Ralph Wiggum can send progress updates via Telegram to keep you informed about spec completions, failures, and loop status.
+This repo includes Telegram helper functions in `scripts/lib/notifications.sh`.
+They can send progress updates via Telegram, but they are **not wired into the
+unified `./scripts/ralph-loop.sh` by default**.
+
+Use this guide if you want to integrate Telegram notifications into your own
+wrapper script, custom hooks, or project-specific workflow around Ralph.
 
 ## Prerequisites
 
@@ -54,11 +59,10 @@ TG_BOT_TOKEN=your-bot-token-here
 TG_CHAT_ID=your-chat-id-here
 ```
 
-And source it before running the Ralph loop:
+And source it before running any helper-powered workflow:
 
 ```bash
 source .env
-./scripts/ralph-loop.sh
 ```
 
 ## Step 4: Test the Connection
@@ -72,6 +76,32 @@ curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
 ```
 
 You should receive the message in Telegram.
+
+## Using The Helper Library
+
+Source the helper library in your own script or shell session:
+
+```bash
+source ./scripts/lib/notifications.sh
+check_telegram
+```
+
+### Send a Text Notification
+
+```bash
+source ./scripts/lib/notifications.sh
+check_telegram
+send_telegram "🤖 Ralph Wiggum test message!"
+```
+
+### Create a Completion Log Entry
+
+```bash
+source ./scripts/lib/notifications.sh
+create_completion_log "example-spec" "Completed successfully." "graph TD; A[Start] --> B[Done]"
+```
+
+This writes markdown (and optionally a generated diagram image) into `completion_log/`.
 
 ## Audio Notifications (Optional)
 
@@ -90,15 +120,21 @@ For audio TTS notifications, you also need a **Chutes API key**.
 export CHUTES_API_KEY="cpk_your-key-here"
 ```
 
-### Enable Audio Notifications
+### Enable Audio In Your Own Wrapper
 
-When running the Ralph loop:
+The audio helper is controlled by the `TELEGRAM_AUDIO` shell variable in
+`scripts/lib/notifications.sh`.
+
+Example:
 
 ```bash
-./scripts/ralph-loop.sh --telegram-audio
+source ./scripts/lib/notifications.sh
+check_telegram
+TELEGRAM_AUDIO=true
+send_telegram_audio "Ralph Wiggum progress update." "Progress Update"
 ```
 
-You'll receive voice messages with progress updates!
+You can call this from your own wrapper script after loop milestones.
 
 ### Voice Options
 
@@ -112,19 +148,25 @@ Edit the script to change voices.
 
 ## Disabling Notifications
 
-If you have the environment variables set but want to run without notifications:
+Because the unified loop does not enable Telegram notifications automatically,
+there is nothing to disable in the stock `./scripts/ralph-loop.sh` command.
+
+If you are using your own wrapper and want to suppress messages for a run, avoid
+sourcing the helper library, unset the environment variables, or set:
 
 ```bash
-./scripts/ralph-loop.sh --no-telegram
+source ./scripts/lib/notifications.sh
+TELEGRAM_ENABLED=false
+TELEGRAM_AUDIO=false
 ```
 
 ## What Notifications Do You Get?
 
-1. **Loop Start**: When the Ralph loop begins
-2. **Spec Completed**: When a spec is successfully completed
-3. **Consecutive Failures**: After 3+ failures without completion
-4. **Stuck Specs**: When NR_OF_TRIES reaches 10 attempts
-5. **Loop Finished**: Summary when the loop ends
+1. **Loop Start**: If your wrapper sends a start message
+2. **Spec Completed**: If your workflow calls `send_telegram` after completion
+3. **Consecutive Failures**: If your wrapper emits warnings after retries
+4. **Stuck Specs**: If your workflow checks `NR_OF_TRIES`
+5. **Loop Finished**: If your wrapper sends a closing summary
 
 ## Example Messages
 
@@ -163,7 +205,7 @@ Completed: 4 specs
 ### Audio not working
 - Verify your CHUTES_API_KEY is valid
 - Check you have credits on your Chutes account
-- Ensure `--telegram-audio` flag is passed
+- Ensure your wrapper sets `TELEGRAM_AUDIO=true` before calling `send_telegram_audio`
 
 ## Security Notes
 

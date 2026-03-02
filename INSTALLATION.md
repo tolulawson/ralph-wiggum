@@ -140,15 +140,21 @@ Present these conversationally, one at a time. **Keep it lightweight.**
 
 #### 6. Optional Features
 
+These are optional helper capabilities. The unified loop works without them.
+If the user enables them, explain that they may require custom wiring in the
+constitution or a project-specific wrapper around the loop.
+
 Present as a quick yes/no checklist:
 
 > "A couple of optional features:"
 
-**a) Telegram Notifications** — Progress updates (completions, failures) sent to a Telegram chat.
+**a) Telegram Notifications** — Progress updates sent via helper functions in `scripts/lib/notifications.sh`.
 
 > "Want Telegram notifications? (yes/no)"
 
 If yes, ask for `TG_BOT_TOKEN` and `TG_CHAT_ID` (env vars, never put tokens in files).
+Also explain that the current unified loop does not enable Telegram flags by default;
+it requires wiring the helper library into a custom wrapper or project workflow.
 
 **b) GitHub Issues** — Work on GitHub issues in addition to spec files.
 
@@ -156,7 +162,7 @@ If yes, ask for `TG_BOT_TOKEN` and `TG_CHAT_ID` (env vars, never put tokens in f
 
 If yes, ask for the repository (e.g. `owner/repo`) and whether issues need approval first.
 
-**c) Completion Logs** — Keep a log of completed specs in `completion_log/`.
+**c) Completion Logs** — Keep optional completion artifacts in `completion_log/`.
 
 > "Keep a completion log? (yes/no)"
 
@@ -257,6 +263,9 @@ If a human decision is required, output `<promise>DECIDE:question</promise>`.
 ## Telegram Notifications
 
 Send progress via Telegram using env vars `TG_BOT_TOKEN` and `TG_CHAT_ID`.
+These notifications are powered by helper functions in `scripts/lib/notifications.sh`.
+The unified `./scripts/ralph-loop.sh` does not enable them automatically; wire them
+into a project-specific wrapper or custom workflow if you want them active.
 
 After completing a spec:
   curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
@@ -287,7 +296,8 @@ Work on issues from `{OWNER/REPO}` in addition to specs. Use `gh` CLI:
 
 ## Completion Logs
 
-After each spec, create `completion_log/YYYY-MM-DD--HH-MM-SS--spec-name.md` with a brief summary.
+Create `completion_log/YYYY-MM-DD--HH-MM-SS--spec-name.md` with a brief summary
+when your project-specific workflow chooses to capture completion artifacts.
 ```
 
 ---
