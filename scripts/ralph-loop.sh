@@ -39,6 +39,7 @@ mkdir -p "$LOG_DIR"
 source "$SCRIPT_DIR/lib/prompt_builder.sh"
 source "$SCRIPT_DIR/lib/runtime_helpers.sh"
 source "$SCRIPT_DIR/lib/provider_adapters.sh"
+source "$SCRIPT_DIR/lib/preflight.sh"
 reset_plan_mode_state
 
 YOLO_ENABLED=true
@@ -232,13 +233,11 @@ configure_runtime "$RUNTIME" "$MODEL_OVERRIDE" || exit 1
 SESSION_LOG="$LOG_DIR/${RUNTIME_SESSION_PREFIX}_${MODE}_session_$(date '+%Y%m%d_%H%M%S').log"
 exec > >(tee -a "$SESSION_LOG") 2>&1
 
-if [[ ! -f "$CONSTITUTION" ]]; then
-    echo -e "${YELLOW}Warning: constitution not found at $CONSTITUTION${NC}"
-    echo -e "${YELLOW}The repo instructions reference it as the source of truth.${NC}"
-    echo ""
-fi
-
 validate_runtime_requirements || exit 1
+
+echo -e "${BLUE}Preflight:${NC}"
+run_preflight "$PROJECT_DIR" "$CONSTITUTION" "$MODE" || exit 1
+echo ""
 
 PROMPT_FILE=$(build_runtime_prompt "$MODE" "$PROJECT_DIR" "$LOG_DIR")
 if [ ! -f "$PROMPT_FILE" ]; then

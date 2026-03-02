@@ -65,13 +65,13 @@
 
 ### Phase 3: Preflight And Environment Validation
 
-- [ ] Add a shared preflight module that runs before any iteration.
-- [ ] Validate:
+- [x] Add a shared preflight module that runs before any iteration.
+- [x] Validate:
   git repo presence, required planning files, constitution presence, and provider CLI availability.
-- [ ] Add profile-aware preflight checks for:
+- [x] Add profile-aware preflight checks for:
   `web`, `expo`, `backend`, and `library`.
-- [ ] For `expo`, check for relevant tooling such as `node`, `watchman`, `xcodebuild`/`simctl`, `adb`, and `npx expo-doctor` when applicable.
-- [ ] Fail fast with clear messages instead of letting the provider burn iterations on missing environment prerequisites.
+- [x] For `expo`, check for relevant tooling such as `node`, `watchman`, `xcodebuild`/`simctl`, `adb`, and `npx expo-doctor` when applicable.
+- [x] Fail fast with clear messages instead of letting the provider burn iterations on missing environment prerequisites.
 
 ### Phase 4: Runtime Observability And Operator UX
 
@@ -211,3 +211,24 @@
 - `rg -n "Set up Ralph Wiggum.*tolulawson/ralph-wiggum|Install The Full Harness|scripts/lib/prompt_builder.sh|vendor/speckit-agent-skills" README.md INSTALL.md INSTALLATION.md skills/ralph-wiggum/SKILL.md`
 - `rg -n "Set up Ralph Wiggum.*fstandhartinger/ralph-wiggum" README.md INSTALL.md INSTALLATION.md skills/ralph-wiggum/SKILL.md`
 - `bash -n scripts/ralph-loop.sh scripts/lib/prompt_builder.sh scripts/lib/runtime_helpers.sh scripts/lib/provider_adapters.sh`
+
+## README + Manual Docs Alignment
+
+### Plan
+
+- [x] Update `README.md` so it reflects the current single-entrypoint architecture and points users at this fork consistently.
+- [x] Remove or reframe stale README examples that no longer match the unified loop interface.
+- [x] Update `INSTALL.md` so the manual install guide clearly describes the full harness layout and current runtime model.
+- [x] Verify `README.md` and `INSTALL.md` no longer contain stale upstream or deprecated loop-wrapper references.
+
+### Review
+
+- `README.md` now describes the current architecture explicitly: one unified loop entrypoint, runtime selection via `--runtime`, shared helpers in `scripts/lib/`, prompt templates in `templates/`, and vendored planning assets in `vendor/speckit-agent-skills/`.
+- The README now points setup and skill-install examples at this fork (`tolulawson/ralph-wiggum`) instead of the upstream repo.
+- The README’s stale Telegram flag examples were replaced with a clearer note: notification helpers still exist, but they are not wired into the unified loop by default.
+- `INSTALL.md` now describes the installed harness layout after the bootstrap copy step and explicitly documents the runtime-switching model.
+
+### Verification
+
+- `rg -n "fstandhartinger/ralph-wiggum|ralph-loop-codex.sh|ralph-loop-gemini.sh|ralph-loop-copilot.sh" README.md INSTALL.md`
+- `rg -n -- "--telegram-audio|--no-telegram" README.md INSTALL.md`

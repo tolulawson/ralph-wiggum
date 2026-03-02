@@ -8,14 +8,13 @@
 
 ## Quick Start
 
-### Install as Agent Skill (New!)
+### Install as Agent Skill (Optional)
 
 ```bash
-# Using Vercel's add-skill
-npx add-skill fstandhartinger/ralph-wiggum
+# If you are installing this fork as an agent skill
+npx add-skill tolulawson/ralph-wiggum
 
-# Using OpenSkills
-openskills install fstandhartinger/ralph-wiggum
+openskills install tolulawson/ralph-wiggum
 ```
 
 ### Full Setup with Interview
@@ -38,7 +37,15 @@ Ralph Wiggum (in this flavour) combines **Geoffrey Huntley's original iterative 
 - 📋 **Spec-Driven Development** — Professional specifications with clear acceptance criteria
 - 🎯 **Completion Verification** — Agent only outputs `<promise>DONE</promise>` when criteria are 100% met
 - 🧠 **Fresh Context Each Loop** — Every iteration starts with a clean context window
-- 📝 **Shared State on Disk** — `IMPLEMENTATION_PLAN.md` persists between loops
+- 📝 **Shared State on Disk** — Specs, plans, logs, and history live in the repo between iterations
+
+### Current Architecture
+
+- One unified loop entrypoint: `./scripts/ralph-loop.sh`
+- Runtime selection via `--runtime claude|codex|gemini|copilot`
+- Shared runtime helpers in `scripts/lib/`
+- Prompt templates in `templates/`
+- Vendored planning assets in `vendor/speckit-agent-skills/`
 
 ---
 
@@ -182,6 +189,7 @@ deterministic even when the machine does not have SpecKit installed globally.
 ```bash
 ./scripts/ralph-loop.sh        # Unlimited iterations
 ./scripts/ralph-loop.sh 20     # Max 20 iterations
+./scripts/ralph-loop.sh --runtime codex
 ./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
 ./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2
 ```
@@ -219,34 +227,15 @@ The counter is stored as a comment in the spec file:
 <!-- NR_OF_TRIES: 5 -->
 ```
 
-### Telegram Notifications (Optional)
+### Optional Notification Helpers
 
-Get progress updates via Telegram! See [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md) for setup.
+The repo still includes helper functions for Telegram notifications and completion
+logs in `scripts/lib/notifications.sh`, plus setup notes in [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md).
 
-```bash
-# Enable telegram (requires TG_BOT_TOKEN and TG_CHAT_ID)
-./scripts/ralph-loop.sh
-
-# Enable audio notifications (also requires CHUTES_API_KEY)
-./scripts/ralph-loop.sh --telegram-audio
-
-# Disable telegram
-./scripts/ralph-loop.sh --no-telegram
-```
-
-**What you'll get:**
-- 🚀 Loop start notifications
-- ✅ Spec completion notifications with mermaid diagrams
-- ⚠️ Warnings for consecutive failures or stuck specs
-- 🏁 Summary when loop finishes
-
-### Completion Logs
-
-On each spec completion, entries are created in `completion_log/`:
-- `YYYY-MM-DD--HH-MM-SS--spec-name.md` — Summary and mermaid code
-- `YYYY-MM-DD--HH-MM-SS--spec-name.png` — Rendered mermaid diagram
-
-These provide a visual history of what was built.
+Those helpers are **not wired into the unified loop by default**. The current
+`./scripts/ralph-loop.sh` interface supports runtime selection and planning
+options, but it does not expose the old `--telegram-audio` or `--no-telegram`
+flags directly.
 
 ### Selecting a Runtime
 
@@ -269,7 +258,14 @@ project/
 ├── specs/
 │   └── NNN-feature-name.md       # Feature specifications
 ├── scripts/
-│   └── ralph-loop.sh             # Unified loop entrypoint
+│   ├── ralph-loop.sh             # Unified loop entrypoint
+│   └── lib/                      # Shared runtime, prompt, and provider helpers
+├── templates/
+│   ├── PROMPT_build.md
+│   ├── PROMPT_plan.md
+│   └── constitution-template.md
+├── vendor/
+│   └── speckit-agent-skills/     # Vendored planning assets for deterministic plan mode
 ├── AGENTS.md                     # Points to constitution
 └── CLAUDE.md                     # Points to constitution
 ```
@@ -315,9 +311,9 @@ Ralph Wiggum follows the [Agent Skills specification](https://agentskills.io) an
 
 | Installer | Command |
 |-----------|---------|
-| [Vercel add-skill](https://github.com/vercel-labs/add-skill) | `npx add-skill fstandhartinger/ralph-wiggum` |
-| [OpenSkills](https://github.com/numman-ali/openskills) | `openskills install fstandhartinger/ralph-wiggum` |
-| [Skillset](https://github.com/climax-tools/skillset) | `skillset add fstandhartinger/ralph-wiggum` |
+| [Vercel add-skill](https://github.com/vercel-labs/add-skill) | `npx add-skill tolulawson/ralph-wiggum` |
+| [OpenSkills](https://github.com/numman-ali/openskills) | `openskills install tolulawson/ralph-wiggum` |
+| [Skillset](https://github.com/climax-tools/skillset) | `skillset add tolulawson/ralph-wiggum` |
 
 Works with: **Claude Code**, **Cursor**, **Codex**, **Windsurf**, **Amp**, **OpenCode**, and more.
 
@@ -342,4 +338,6 @@ MIT License — See [LICENSE](LICENSE) for details.
 
 ---
 
+**Repository**: [github.com/tolulawson/ralph-wiggum](https://github.com/tolulawson/ralph-wiggum)
+  
 **Website**: [ralph-wiggum-web.onrender.com](https://ralph-wiggum-web.onrender.com)
