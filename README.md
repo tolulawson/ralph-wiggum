@@ -206,6 +206,9 @@ the repo's own top-level `skills/` folder should not be copied there.
 ./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2
 ```
 
+Build mode requires `.specify/memory/constitution.md`. If it is missing, Ralph now
+fails fast in preflight instead of running with reduced guidance.
+
 Each iteration:
 1. Picks the highest priority task
 2. Creates or switches to that task's branch (when `work-items.json` is present)
@@ -242,6 +245,8 @@ Every loop run writes **all output** to log files in `logs/`:
 - **Codex last message:** `logs/ralph_codex_output_iter_N_*.txt` (only when `--runtime codex` is used)
 
 If something gets stuck, these logs contain the full verbose trace.
+Keep `logs/` ignored in your project so task-branch switching only reflects real
+tracked code changes.
 
 ### NR_OF_TRIES Tracking
 

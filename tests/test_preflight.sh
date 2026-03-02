@@ -34,15 +34,26 @@ assert_equals "no errors added"            "0" "${#PREFLIGHT_ERRORS[@]}"
 
 suite "check_constitution"
 
+PREFLIGHT_ERRORS=()
 PREFLIGHT_WARNINGS=()
 
-check_constitution "/nonexistent/constitution.md"
-assert_equals "missing constitution adds 1 warning" "1" "${#PREFLIGHT_WARNINGS[@]}"
+check_constitution "/nonexistent/constitution.md" "build"
+assert_false  "missing constitution in build mode returns non-zero" "$?"
+assert_equals "missing constitution in build mode adds 1 error" "1" "${#PREFLIGHT_ERRORS[@]}"
+assert_equals "missing constitution in build mode adds no warning" "0" "${#PREFLIGHT_WARNINGS[@]}"
 
+PREFLIGHT_ERRORS=()
+PREFLIGHT_WARNINGS=()
+check_constitution "/nonexistent/constitution.md" "plan"
+assert_equals "missing constitution in plan mode adds 1 warning" "1" "${#PREFLIGHT_WARNINGS[@]}"
+assert_equals "missing constitution in plan mode adds no error" "0" "${#PREFLIGHT_ERRORS[@]}"
+
+PREFLIGHT_ERRORS=()
 PREFLIGHT_WARNINGS=()
 TMP_CONST=$(mktemp)
-check_constitution "$TMP_CONST"
+check_constitution "$TMP_CONST" "build"
 assert_equals "existing constitution: no warning" "0" "${#PREFLIGHT_WARNINGS[@]}"
+assert_equals "existing constitution: no error" "0" "${#PREFLIGHT_ERRORS[@]}"
 rm -f "$TMP_CONST"
 
 # ── check_work_source ─────────────────────────────────────────────────────────
@@ -159,8 +170,9 @@ TMPDIR_PF2=$(make_tmpdir)
 git -C "$TMPDIR_PF2" init -q
 git -C "$TMPDIR_PF2" commit --allow-empty -q -m "init"
 echo "# Plan" > "$TMPDIR_PF2/IMPLEMENTATION_PLAN.md"
+echo "# Constitution" > "$TMPDIR_PF2/constitution.md"
 
-run_preflight "$TMPDIR_PF2" "/nonexistent/constitution.md" "build" "false" >/dev/null 2>&1
+run_preflight "$TMPDIR_PF2" "$TMPDIR_PF2/constitution.md" "build" "false" >/dev/null 2>&1
 assert_true "preflight passes with git repo + IMPLEMENTATION_PLAN.md" "$?"
 
 suite "run_preflight: plan mode skips work-source check"
@@ -172,5 +184,15 @@ git -C "$TMPDIR_PF3" commit --allow-empty -q -m "init"
 # No work source at all — but plan mode should not fail for that
 run_preflight "$TMPDIR_PF3" "/nonexistent/constitution.md" "plan" "false" >/dev/null 2>&1
 assert_true "plan mode does not fail for missing work source" "$?"
+
+suite "run_preflight: build mode requires constitution"
+
+TMPDIR_PF4=$(make_tmpdir)
+git -C "$TMPDIR_PF4" init -q
+git -C "$TMPDIR_PF4" commit --allow-empty -q -m "init"
+echo "# Plan" > "$TMPDIR_PF4/IMPLEMENTATION_PLAN.md"
+
+run_preflight "$TMPDIR_PF4" "/nonexistent/constitution.md" "build" "true" >/dev/null 2>&1
+assert_false "build mode fails when constitution is missing" "$?"
 
 print_test_summary

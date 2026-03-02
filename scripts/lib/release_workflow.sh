@@ -25,7 +25,10 @@ detect_base_branch() {
 
 worktree_is_clean() {
     local project_dir="$1"
-    [[ -z "$(git -C "$project_dir" status --porcelain 2>/dev/null)" ]]
+
+    git -C "$project_dir" diff --quiet --no-ext-diff -- 2>/dev/null || return 1
+    git -C "$project_dir" diff --cached --quiet --no-ext-diff -- 2>/dev/null || return 1
+    return 0
 }
 
 ensure_work_item_branch() {
@@ -53,8 +56,8 @@ ensure_work_item_branch() {
     fi
 
     if ! worktree_is_clean "$project_dir"; then
-        echo -e "${RED}Error: cannot create or switch task branches with a dirty worktree on '$base_branch'.${NC}"
-        echo -e "${YELLOW}Commit, stash, or clean local changes before starting the next task.${NC}"
+        echo -e "${RED}Error: cannot create or switch task branches with tracked changes on '$base_branch'.${NC}"
+        echo -e "${YELLOW}Commit, stash, or clean staged/modified files before starting the next task.${NC}"
         return 1
     fi
 

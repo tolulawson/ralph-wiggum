@@ -90,10 +90,23 @@ check_git_repo() {
     return 0
 }
 
-# Warn if the constitution is missing (not fatal; loop continues with reduced guidance).
+# Validate the constitution presence.
+# In build mode it is required because it is the policy source of truth.
+# In plan mode we warn but allow the loop to continue.
 check_constitution() {
     local constitution="$1"
-    if [[ ! -f "$constitution" ]]; then
+    local mode="${2:-build}"
+
+    if [[ -f "$constitution" ]]; then
+        return 0
+    fi
+
+    if [[ "$mode" = "build" ]]; then
+        PREFLIGHT_ERRORS+=("Constitution not found at $constitution — create it before running build mode")
+        return 1
+    fi
+
+    if [[ "$mode" = "plan" ]]; then
         PREFLIGHT_WARNINGS+=("Constitution not found at $constitution — run the guided setup or see CLAUDE.md")
     fi
 }
@@ -205,7 +218,7 @@ run_preflight() {
     PREFLIGHT_ERRORS=()
 
     check_git_repo "$project_dir"
-    check_constitution "$constitution"
+    check_constitution "$constitution" "$mode"
 
     if [[ "$mode" = "build" ]]; then
         check_work_source "$project_dir"

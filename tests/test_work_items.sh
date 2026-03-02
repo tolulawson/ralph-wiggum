@@ -225,4 +225,33 @@ assert_equals "returns to base branch" "main" "$current_branch"
 git -C "$TMPDIR_REPO" merge-base --is-ancestor "ralph/task-1" "main"
 assert_true "task branch is merged into main" "$?"
 
+# ── worktree_is_clean / branch switching hygiene ──────────────────────────────
+
+suite "worktree_is_clean ignores untracked files"
+
+TMPDIR_REPO2=$(make_tmpdir)
+git -C "$TMPDIR_REPO2" init -b main >/dev/null 2>&1
+git -C "$TMPDIR_REPO2" config user.name "Test User"
+git -C "$TMPDIR_REPO2" config user.email "test@example.com"
+printf 'base\n' > "$TMPDIR_REPO2/note.txt"
+git -C "$TMPDIR_REPO2" add note.txt
+git -C "$TMPDIR_REPO2" commit -m "base" >/dev/null 2>&1
+
+mkdir -p "$TMPDIR_REPO2/logs"
+printf 'runtime log\n' > "$TMPDIR_REPO2/logs/run.log"
+
+worktree_is_clean "$TMPDIR_REPO2"
+assert_true "untracked runtime files do not make worktree dirty" "$?"
+
+branch_name=$(ensure_work_item_branch "$TMPDIR_REPO2" "task-2")
+assert_equals "branch can be created with only untracked files present" "ralph/task-2" "$branch_name"
+
+suite "worktree_is_clean blocks tracked modifications"
+
+git -C "$TMPDIR_REPO2" switch main >/dev/null 2>&1
+printf 'changed\n' >> "$TMPDIR_REPO2/note.txt"
+
+worktree_is_clean "$TMPDIR_REPO2"
+assert_false "tracked modifications make worktree dirty" "$?"
+
 print_test_summary

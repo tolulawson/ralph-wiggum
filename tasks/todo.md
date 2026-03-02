@@ -14,6 +14,19 @@
 - The biggest gaps in this repo are duplicated loop logic, missing integration of existing helper libraries, prompt-file side effects, and limited runtime state handling beyond simple DONE detection.
 - The highest-value direction is a shared loop engine with provider adapters plus pluggable project profiles for web and Expo/mobile verification.
 
+## Review Hardening Follow-Up
+
+- [x] Make build-mode preflight fail when `.specify/memory/constitution.md` is missing, while keeping plan mode as a warning-only path.
+- [x] Allow task-branch switching when only untracked runtime artifacts are present; still block on tracked changes.
+- [x] Align the manual install path with the modern constitution contract and document `.gitignore` handling for runtime artifacts.
+
+### Review Hardening Verification
+
+- `bash tests/test_preflight.sh`
+- `bash tests/test_work_items.sh`
+- `bash tests/test_smoke.sh`
+- `bash tests/run_tests.sh`
+
 ## Planning Phase Notes
 
 - External planning is front-loaded and explicit: create a PRD, generate a task lookup table, then execute one task at a time from `.agent/tasks.json`.

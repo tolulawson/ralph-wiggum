@@ -62,6 +62,15 @@ After this step, the project has the complete local harness needed for:
 - deterministic planning via the vendored SpecKit planning assets
 - task-by-task branch / pull-request release handling driven by `work-items.json`
 
+Also add the runtime artifacts to `.gitignore` so logs stay local and do not
+become accidental worktree noise:
+
+```bash
+touch .gitignore
+grep -qxF 'logs/' .gitignore || printf '\nlogs/\n' >> .gitignore
+grep -qxF '.circuit_breaker_state' .gitignore || printf '.circuit_breaker_state\n' >> .gitignore
+```
+
 Important: keep the planning assets in one place inside the client project:
 `vendor/speckit-agent-skills/`. Do not also copy this repository's top-level
 `skills/` directory into the project; that directory exists only so Ralph itself
@@ -195,7 +204,7 @@ If yes, ask for the repository (e.g. `owner/repo`) and whether issues need appro
 
 Create `.specify/memory/constitution.md` using the interview answers.
 
-The constitution must be **concise**. It's the single source of truth — the agent reads it every iteration.
+The constitution must be **concise**. It's the single source of truth — the agent reads it every iteration, and build mode now fails fast if it is missing.
 
 **Template** (fill in bracketed values, include optional sections only if user opted in):
 
