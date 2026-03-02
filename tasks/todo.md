@@ -84,11 +84,11 @@
 
 ### Phase 5: Stuck-Loop Protection
 
-- [ ] Integrate the existing `nr_of_tries` tracking into real loop execution.
-- [ ] Increment attempt counters for specs or work items on failed completion cycles.
-- [ ] When an item exceeds the retry threshold, mark it as “needs split” and trigger replanning guidance instead of blind retries.
-- [ ] Integrate the existing circuit breaker module into the shared runtime.
-- [ ] Halt execution when repeated no-progress or repeated-error patterns indicate the agent is stuck.
+- [x] Integrate the existing `nr_of_tries` tracking into real loop execution.
+- [x] Increment attempt counters for specs or work items on failed completion cycles.
+- [x] When an item exceeds the retry threshold, mark it as “needs split” and trigger replanning guidance instead of blind retries.
+- [x] Integrate the existing circuit breaker module into the shared runtime.
+- [x] Halt execution when repeated no-progress or repeated-error patterns indicate the agent is stuck.
 
 ### Phase 6: Structured Work Queue
 
@@ -232,3 +232,12 @@
 
 - `rg -n "fstandhartinger/ralph-wiggum|ralph-loop-codex.sh|ralph-loop-gemini.sh|ralph-loop-copilot.sh" README.md INSTALL.md`
 - `rg -n -- "--telegram-audio|--no-telegram" README.md INSTALL.md`
+
+## Installation + Telegram Docs Alignment
+
+### Plan
+
+- [ ] Update `INSTALLATION.md` so the AI-guided setup flow describes optional notification/logging features accurately under the unified loop.
+- [ ] Update `TELEGRAM_SETUP.md` so it no longer advertises deprecated unified-loop CLI flags.
+- [ ] Reframe Telegram support as helper-library functionality unless the user wires it into a custom loop wrapper.
+- [ ] Verify the setup docs no longer promise removed Telegram loop flags.

@@ -40,6 +40,9 @@ source "$SCRIPT_DIR/lib/prompt_builder.sh"
 source "$SCRIPT_DIR/lib/runtime_helpers.sh"
 source "$SCRIPT_DIR/lib/provider_adapters.sh"
 source "$SCRIPT_DIR/lib/preflight.sh"
+source "$SCRIPT_DIR/lib/circuit_breaker.sh"
+source "$SCRIPT_DIR/lib/nr_of_tries.sh"
+CB_STATE_FILE="$PROJECT_DIR/.circuit_breaker_state"
 reset_plan_mode_state
 
 YOLO_ENABLED=true
@@ -70,6 +73,7 @@ Runtimes:
 Options:
   --runtime RUNTIME   Select the AI runtime (default: claude)
   --model MODEL       Override the runtime model when the selected runtime supports it
+  --reset-circuit     Reset the circuit breaker to CLOSED state and exit
   -h, --help          Show this help
 
 Notes:
@@ -214,6 +218,10 @@ while [[ $# -gt 0 ]]; do
             MAX_ITERATIONS="$1"
             shift
             ;;
+        --reset-circuit)
+            reset_circuit_breaker "Manual reset via --reset-circuit flag"
+            exit 0
+            ;;
         *)
             echo -e "${RED}Unknown argument: $1${NC}"
             show_help
@@ -223,6 +231,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$PROJECT_DIR"
+init_circuit_breaker
 
 if [[ "$MODE" = "plan" ]]; then
     validate_plan_mode_arguments "$PROJECT_DIR" || exit 1
@@ -325,6 +334,15 @@ while true; do
     : > "$LOG_FILE"
     WATCH_PID=""
 
+    # Stuck-loop protection: halt if circuit breaker is open
+    if ! can_execute; then
+        should_halt_execution
+        print_stuck_specs_summary "$PROJECT_DIR/specs"
+        exit $EXIT_PROVIDER_ERROR
+    fi
+
+    GIT_HASH_BEFORE=$(git rev-parse HEAD 2>/dev/null || echo "none")
+
     if [ "$ROLLING_OUTPUT_INTERVAL" -gt 0 ] && [ "$ROLLING_OUTPUT_LINES" -gt 0 ] && [ -t 1 ] && [ -w /dev/tty ]; then
         watch_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME" &
         WATCH_PID=$!
@@ -338,6 +356,12 @@ while true; do
         echo ""
         echo -e "${GREEN}✓ ${RUNTIME_SHORT_NAME} execution completed${NC}"
 
+        GIT_HASH_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "none")
+        ITER_FILES_CHANGED=0
+        if [[ "$GIT_HASH_BEFORE" != "$GIT_HASH_AFTER" ]]; then
+            ITER_FILES_CHANGED=$(git diff --name-only "$GIT_HASH_BEFORE" "$GIT_HASH_AFTER" 2>/dev/null | wc -l | tr -d ' ')
+        fi
+
         detect_runtime_promise_signal "$LOG_FILE"
 
         if has_completion_promise; then
@@ -345,6 +369,7 @@ while true; do
             echo -e "${GREEN}✓ Completion signal detected: ${DETECTED_SIGNAL}${NC}"
             echo -e "${GREEN}✓ Task completed successfully!${NC}"
             CONSECUTIVE_FAILURES=0
+            record_loop_result "$ITERATION" "$ITER_FILES_CHANGED" "false"
 
             if [ "$MODE" = "plan" ]; then
                 echo ""
@@ -367,6 +392,22 @@ while true; do
             CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
             print_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME"
 
+            # Update per-spec attempt tracking for any spec files touched this iteration
+            if [[ -d "specs" && "$GIT_HASH_BEFORE" != "$GIT_HASH_AFTER" ]]; then
+                TOUCHED_SPECS=$(git diff --name-only "$GIT_HASH_BEFORE" "$GIT_HASH_AFTER" 2>/dev/null | grep -E 'specs/.*\.md' || true)
+                if [[ -n "$TOUCHED_SPECS" ]]; then
+                    while IFS= read -r spec_file; do
+                        [[ -f "$spec_file" ]] || continue
+                        new_tries=$(increment_nr_of_tries "$spec_file")
+                        if is_spec_stuck "$spec_file"; then
+                            echo -e "${YELLOW}⚠ Spec '$spec_file' is stuck ($new_tries/$MAX_NR_OF_TRIES attempts)${NC}"
+                            echo -e "${YELLOW}  Consider splitting this spec into smaller tasks.${NC}"
+                        fi
+                    done <<< "$TOUCHED_SPECS"
+                fi
+            fi
+            record_loop_result "$ITERATION" "$ITER_FILES_CHANGED" "false"
+
             if [ $CONSECUTIVE_FAILURES -ge $MAX_CONSECUTIVE_FAILURES ]; then
                 echo ""
                 echo -e "${RED}⚠ $MAX_CONSECUTIVE_FAILURES consecutive iterations without completion.${NC}"
@@ -377,6 +418,7 @@ while true; do
                 fi
                 echo -e "${RED}  - Simplifying the current spec${NC}"
                 echo -e "${RED}  - Manually fixing blocking issues${NC}"
+                print_stuck_specs_summary "$PROJECT_DIR/specs"
                 echo ""
                 CONSECUTIVE_FAILURES=0
             fi
@@ -393,6 +435,13 @@ while true; do
         fi
         CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
         print_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME"
+
+        GIT_HASH_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "none")
+        ITER_FILES_CHANGED=0
+        if [[ "$GIT_HASH_BEFORE" != "$GIT_HASH_AFTER" ]]; then
+            ITER_FILES_CHANGED=$(git diff --name-only "$GIT_HASH_BEFORE" "$GIT_HASH_AFTER" 2>/dev/null | wc -l | tr -d ' ')
+        fi
+        record_loop_result "$ITERATION" "$ITER_FILES_CHANGED" "true"
     fi
 
     push_branch_if_needed "$CURRENT_BRANCH"
