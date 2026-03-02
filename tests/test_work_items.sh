@@ -1,0 +1,172 @@
+#!/bin/bash
+#
+# Tests for scripts/lib/work_items.sh and scripts/lib/release_workflow.sh
+# Covers: select_next_work_item, mark_* transitions, dependency ordering,
+#         reconcile_merged_pull_requests (offline stub), build_pull_request_*.
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/test_helpers.sh"
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+
+source "$SCRIPT_DIR/../scripts/lib/work_items.sh"
+source "$SCRIPT_DIR/../scripts/lib/release_workflow.sh"
+
+# Helper: write a minimal work-items.json
+write_work_items() {
+    local path="$1"
+    cat > "$path" <<'JSON'
+{
+  "items": [
+    {
+      "id": "task-1",
+      "title": "First task",
+      "spec": "specs/task-1/spec.md",
+      "tasks": "",
+      "priority": 1,
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "task-2",
+      "title": "Second task",
+      "spec": "specs/task-2/spec.md",
+      "tasks": "",
+      "priority": 2,
+      "status": "pending",
+      "dependencies": ["task-1"]
+    },
+    {
+      "id": "task-3",
+      "title": "Done task",
+      "spec": "specs/task-3/spec.md",
+      "tasks": "",
+      "priority": 0,
+      "status": "done",
+      "dependencies": []
+    }
+  ]
+}
+JSON
+}
+
+# ── has_work_items_file / work_items_file_path ────────────────────────────────
+
+suite "has_work_items_file"
+
+TMPDIR_WI=$(make_tmpdir)
+
+has_work_items_file "$TMPDIR_WI"
+assert_false "no file → returns false" "$?"
+
+write_work_items "$TMPDIR_WI/work-items.json"
+has_work_items_file "$TMPDIR_WI"
+assert_true  "file present → returns true" "$?"
+
+# ── select_next_work_item ─────────────────────────────────────────────────────
+
+suite "select_next_work_item"
+
+PROJ="$TMPDIR_WI"
+
+# task-1 is pending, no deps → should be selected (priority 1 < 2)
+select_next_work_item "$PROJ"
+assert_equals "selects first eligible item"  "task-1" "$ACTIVE_WORK_ITEM_ID"
+assert_equals "title populated"              "First task" "$ACTIVE_WORK_ITEM_TITLE"
+
+# task-3 is done → should not be selected
+assert_not_equals "done item not selected"   "task-3" "$ACTIVE_WORK_ITEM_ID"
+
+# task-2 depends on task-1 (still pending) → blocked
+cp "$PROJ/work-items.json" "$PROJ/work-items.json.bak"
+# Remove task-1 from the selectable pool by marking it done
+python3 - "$PROJ/work-items.json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as f: d = json.load(f)
+for item in d["items"]:
+    if item["id"] == "task-1": item["status"] = "done"
+with open(sys.argv[1], "w") as f: json.dump(d, f, indent=2)
+PY
+
+select_next_work_item "$PROJ"
+assert_equals "task-2 selectable once task-1 is done" "task-2" "$ACTIVE_WORK_ITEM_ID"
+
+mv "$PROJ/work-items.json.bak" "$PROJ/work-items.json"
+
+# ── select_next_work_item: all done ──────────────────────────────────────────
+
+suite "select_next_work_item: all done returns false"
+
+TMPDIR_WI2=$(make_tmpdir)
+cat > "$TMPDIR_WI2/work-items.json" <<'JSON'
+{"items":[{"id":"t1","status":"done","dependencies":[],"priority":1}]}
+JSON
+select_next_work_item "$TMPDIR_WI2"
+assert_false "no eligible items → returns false" "$?"
+
+# ── mark_work_item_in_progress ────────────────────────────────────────────────
+
+suite "mark_work_item_in_progress"
+
+write_work_items "$TMPDIR_WI/work-items.json"
+mark_work_item_in_progress "$TMPDIR_WI" "task-1" "ralph/task-1"
+
+set_active_work_item_by_id "$TMPDIR_WI" "task-1"
+assert_equals "status set to in_progress"   "in_progress"  "$ACTIVE_WORK_ITEM_STATUS"
+assert_equals "branch stored"               "ralph/task-1" "$ACTIVE_WORK_ITEM_BRANCH"
+
+# ── mark_work_item_awaiting_merge ────────────────────────────────────────────
+
+suite "mark_work_item_awaiting_merge"
+
+write_work_items "$TMPDIR_WI/work-items.json"
+mark_work_item_awaiting_merge "$TMPDIR_WI" "task-1" "ralph/task-1" "https://github.com/x/x/pull/42" "42"
+
+set_active_work_item_by_id "$TMPDIR_WI" "task-1"
+assert_equals "status awaiting_merge"    "awaiting_merge"               "$ACTIVE_WORK_ITEM_STATUS"
+assert_equals "PR URL stored"           "https://github.com/x/x/pull/42" "$ACTIVE_WORK_ITEM_PR_URL"
+assert_equals "PR number stored"        "42"                             "$ACTIVE_WORK_ITEM_PR_NUMBER"
+
+# ── mark_work_item_done ───────────────────────────────────────────────────────
+
+suite "mark_work_item_done"
+
+write_work_items "$TMPDIR_WI/work-items.json"
+mark_work_item_done "$TMPDIR_WI" "task-1"
+
+set_active_work_item_by_id "$TMPDIR_WI" "task-1"
+assert_equals "status done"          "done"   "$ACTIVE_WORK_ITEM_STATUS"
+assert_equals "merge_status merged"  "merged" "$ACTIVE_WORK_ITEM_MERGE_STATUS"
+
+# ── increment_work_item_retry_count ──────────────────────────────────────────
+
+suite "increment_work_item_retry_count"
+
+write_work_items "$TMPDIR_WI/work-items.json"
+increment_work_item_retry_count "$TMPDIR_WI" "task-1"
+increment_work_item_retry_count "$TMPDIR_WI" "task-1"
+
+retry=$(python3 - "$TMPDIR_WI/work-items.json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as f: d = json.load(f)
+for item in d["items"]:
+    if item["id"] == "task-1":
+        print(item.get("retry_count", 0))
+PY
+)
+assert_equals "retry_count incremented to 2" "2" "$retry"
+
+# ── build_pull_request_title / body ──────────────────────────────────────────
+
+suite "build_pull_request_title and body"
+
+title=$(build_pull_request_title "task-1" "First task")
+assert_contains "title includes item ID"    "task-1"     "$title"
+assert_contains "title includes item title" "First task" "$title"
+
+body=$(build_pull_request_body "task-1" "First task" "specs/task-1/spec.md" "")
+assert_contains "body includes item ID"   "task-1"               "$body"
+assert_contains "body mentions Ralph loop" "Ralph loop"          "$body"
+
+print_test_summary

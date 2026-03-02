@@ -160,18 +160,51 @@
 
 ### Phase 9: Tests And Regression Coverage
 
-- [ ] Add shell tests for:
+- [x] Add shell tests for:
   argument parsing, prompt generation, promise parsing, preflight failures, and profile selection.
-- [ ] Add tests for stuck-loop handling (`nr_of_tries` and circuit breaker).
-- [ ] Add tests for plan/build precedence between:
+- [x] Add tests for stuck-loop handling (`nr_of_tries` and circuit breaker).
+- [x] Add tests for plan/build precedence between:
   `work-items.json`, `IMPLEMENTATION_PLAN.md`, and direct specs.
-- [ ] Add smoke tests that verify all provider wrappers still invoke the shared runtime correctly.
+- [x] Add smoke tests that verify all provider wrappers still invoke the shared runtime correctly.
+
+### Phase 9 Review
+
+- Added `tests/lib/test_helpers.sh` with shared assert helpers (`assert_equals`, `assert_true`,
+  `assert_false`, `assert_contains`, `assert_file_exists`, `assert_cmd_succeeds`, `assert_cmd_fails`).
+- Added 7 test files covering:
+  - `test_runtime_helpers.sh`: promise parsing, DONE/ALL_DONE/BLOCKED/DECIDE detection, file-based
+    signal extraction (27 assertions).
+  - `test_preflight.sh`: git-repo check, constitution check, work-source check, profile auto-detection
+    for expo/web/backend/unknown, explicit profile via constitution, plan mode skip (27 assertions).
+  - `test_nr_of_tries.sh`: get/increment/reset counters, is_spec_stuck, get_stuck_specs (15 assertions).
+  - `test_circuit_breaker.sh`: init, can_execute, no-progress threshold, progress reset, same-error
+    threshold, reset (16 assertions).
+  - `test_prompt_builder.sh`: argument parsing (--prd/--notes/--brief), missing-value errors,
+    validate_plan_mode_arguments (18 assertions).
+  - `test_work_items.sh`: task selection, dependency ordering, state transitions, retry count,
+    PR title/body builders (19 assertions).
+  - `test_smoke.sh`: bash -n syntax for all scripts, --help output, configure_runtime for all four
+    runtimes, unknown-runtime error, work-source precedence (41 assertions).
+- Added `tests/run_tests.sh` as the single test runner entry point with optional name filter.
+- Fixed two macOS-portability bugs discovered by the new tests:
+  - `nr_of_tries.sh`: replaced `grep -oP` (unsupported on BSD grep) with `grep -oE` plus a
+    `grep -oE '[0-9]+$'` pipeline; replaced `sed -i` (no extension on macOS) with a temp-file pattern.
+  - `preflight.sh`: moved `tr '[:upper:]' '[:lower:]'` before `sed` and replaced `\s*` with
+    `[[:space:]]*` in the sed pattern so mixed-case profile declarations parse correctly.
+- All 148 assertions across 7 test files pass: `./tests/run_tests.sh`
+
+### Phase 9 Verification
+
+- `./tests/run_tests.sh`
+- `./tests/run_tests.sh smoke`
+- `./tests/run_tests.sh circuit`
+- `bash -n tests/lib/test_helpers.sh tests/test_*.sh tests/run_tests.sh`
 
 ### Suggested Sequencing
 
-- [ ] Build in this order:
+- [x] Build in this order:
   Phase 1 -> Phase 2 -> Phase 3 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 4 -> Phase 9
-- [ ] Reason:
+- [x] Reason:
   correctness and shared architecture first, then state handling and safeguards, then structured execution, then richer UX, and finally broader regression coverage.
 
 ## Current Integration Slice
@@ -277,12 +310,32 @@
 
 ### Plan
 
-- [ ] Add shared helpers for `work-items.json` state transitions, task selection, and merge reconciliation.
-- [ ] Add release workflow helpers for task branches and draft PR creation/update via `gh`.
-- [ ] Refactor the loop so `work-items.json` drives one-task-at-a-time branching, push, PR, and merge waiting.
-- [ ] Change build-mode prompts/schema so the runtime, not the agent, owns release-state transitions after implementation succeeds.
-- [ ] Update docs/templates to describe the new task branch and merge workflow.
-- [ ] Run syntax checks plus focused smoke tests for the new work-item and PR helpers.
+- [x] Add shared helpers for `work-items.json` state transitions, task selection, and merge reconciliation.
+- [x] Add release workflow helpers for task branches and draft PR creation/update via `gh`.
+- [x] Refactor the loop so `work-items.json` drives one-task-at-a-time branching, push, PR, and merge waiting.
+- [x] Change build-mode prompts/schema so the runtime, not the agent, owns release-state transitions after implementation succeeds.
+- [x] Update docs/templates to describe the new task branch and merge workflow.
+- [x] Run syntax checks plus focused smoke tests for the new work-item and PR helpers.
+
+### Review
+
+- Added `scripts/lib/work_items.sh` to make `work-items.json` a real execution checklist with task selection, retry tracking, release-state transitions, and merge reconciliation.
+- Added `scripts/lib/release_workflow.sh` to manage per-task branches, draft PR creation/update via `gh`, and consistent “awaiting merge” messaging.
+- `scripts/ralph-loop.sh` now treats `work-items.json` as a one-task-at-a-time release queue: it reconciles merged tasks, selects the next actionable work item, switches to that task branch, and only pushes/opens a draft PR after the agent finishes a successful implementation pass.
+- The build prompt and planning schema now reflect the new contract: the agent creates a local review-ready commit, while the runtime owns push, PR, and merge-state updates.
+- Fixed a merge-reconciliation bug for manually merged tasks without a PR number; those items now advance from `awaiting_merge` to `done` when their task branch is detected as merged into the base branch.
+- Fixed the local shell-test temp-dir helper so command-substitution-based fixtures are no longer deleted before the tests can use them.
+- Updated README and install docs so they no longer describe the old “agent commits and pushes directly after each spec” model.
+
+### Verification
+
+- `bash -n scripts/ralph-loop.sh scripts/lib/runtime_helpers.sh scripts/lib/work_items.sh scripts/lib/release_workflow.sh scripts/lib/prompt_builder.sh`
+- `./scripts/ralph-loop.sh --help`
+- `bash tests/test_work_items.sh`
+- `bash tests/test_runtime_helpers.sh`
+- Smoke test: `select_next_work_item` correctly prefers an `in_progress` item and preserves empty-field parsing for `branch` / `pr_number`
+- Smoke test: `find_awaiting_merge_item` correctly reads an `awaiting_merge` item with an empty `pr_number`
+- Smoke test: `reconcile_merged_pull_requests` now marks a manually merged branch-only task as `done`
 
 ## Installation + Telegram Docs Alignment
 

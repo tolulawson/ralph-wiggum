@@ -28,7 +28,8 @@ detect_project_profile() {
     if [[ -f "$constitution" ]]; then
         local profile_line
         profile_line=$(grep -iE '^\s*profile\s*:\s*\S+' "$constitution" 2>/dev/null | head -1 \
-                       | sed 's/.*profile\s*:\s*//' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+                       | tr '[:upper:]' '[:lower:]' \
+                       | sed 's/.*profile[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')
         case "$profile_line" in
             web|expo|backend|library)
                 PREFLIGHT_PROJECT_PROFILE="$profile_line"

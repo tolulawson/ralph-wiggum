@@ -15,7 +15,8 @@ get_nr_of_tries() {
     local spec_file="$1"
     if [ -f "$spec_file" ]; then
         local tries
-        tries=$(grep -oP 'NR_OF_TRIES:\s*\K\d+' "$spec_file" 2>/dev/null || echo "0")
+        tries=$(grep -oE 'NR_OF_TRIES:[[:space:]]*[0-9]+' "$spec_file" 2>/dev/null \
+                | grep -oE '[0-9]+$' | head -1)
         echo "${tries:-0}"
     else
         echo "0"
@@ -32,9 +33,11 @@ increment_nr_of_tries() {
     local new_tries=$((current_tries + 1))
 
     if grep -q "NR_OF_TRIES:" "$spec_file" 2>/dev/null; then
-        sed -i "s/NR_OF_TRIES:\s*[0-9]*/NR_OF_TRIES: $new_tries/" "$spec_file"
+        local _tmp
+        _tmp=$(mktemp)
+        sed "s/NR_OF_TRIES:[[:space:]]*[0-9]*/NR_OF_TRIES: $new_tries/" "$spec_file" > "$_tmp" && mv "$_tmp" "$spec_file"
     else
-        echo -e "\n<!-- NR_OF_TRIES: $new_tries -->" >> "$spec_file"
+        printf '\n<!-- NR_OF_TRIES: %s -->\n' "$new_tries" >> "$spec_file"
     fi
 
     echo "$new_tries"
@@ -44,7 +47,9 @@ increment_nr_of_tries() {
 reset_nr_of_tries() {
     local spec_file="$1"
     if grep -q "NR_OF_TRIES:" "$spec_file" 2>/dev/null; then
-        sed -i "s/NR_OF_TRIES:\s*[0-9]*/NR_OF_TRIES: 0/" "$spec_file"
+        local _tmp
+        _tmp=$(mktemp)
+        sed "s/NR_OF_TRIES:[[:space:]]*[0-9]*/NR_OF_TRIES: 0/" "$spec_file" > "$_tmp" && mv "$_tmp" "$spec_file"
     fi
 }
 
