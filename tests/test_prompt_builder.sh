@@ -103,4 +103,37 @@ parse_plan_mode_arguments --prd "/nonexistent/prd.md" 2>/dev/null
 validate_plan_mode_arguments "$TMPDIR_VP" >/dev/null 2>&1
 assert_false "--prd with missing file fails validation" "$?"
 
+# ── build_runtime_prompt: testing policy context ─────────────────────────────
+
+suite "build_runtime_prompt: appends testing policy"
+
+TMPDIR_BP=$(make_tmpdir)
+mkdir -p "$TMPDIR_BP/templates" "$TMPDIR_BP/logs" "$TMPDIR_BP/.specify/memory"
+cat > "$TMPDIR_BP/templates/PROMPT_build.md" <<'EOF'
+# Test Build Prompt
+EOF
+cat > "$TMPDIR_BP/.specify/memory/constitution.md" <<'EOF'
+# Example Constitution
+
+## Testing Policy
+
+### Unit Tests
+- `pnpm test`
+
+### End-to-End Tests
+- `maestro test .maestro/smoke.yaml`
+
+## Something Else
+
+ignored
+EOF
+
+PREFLIGHT_PROJECT_PROFILE="unknown"
+prompt_file=$(build_runtime_prompt "build" "$TMPDIR_BP" "$TMPDIR_BP/logs")
+prompt_content=$(cat "$prompt_file")
+
+assert_contains "testing policy heading appended" "## Testing Policy" "$prompt_content"
+assert_contains "unit test command included" '`pnpm test`' "$prompt_content"
+assert_contains "e2e command included" '`maestro test .maestro/smoke.yaml`' "$prompt_content"
+
 print_test_summary

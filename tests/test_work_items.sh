@@ -169,4 +169,60 @@ body=$(build_pull_request_body "task-1" "First task" "specs/task-1/spec.md" "")
 assert_contains "body includes item ID"   "task-1"               "$body"
 assert_contains "body mentions Ralph loop" "Ralph loop"          "$body"
 
+# ── testing details in active work item context ──────────────────────────────
+
+suite "active work item testing details"
+
+TMPDIR_WI3=$(make_tmpdir)
+cat > "$TMPDIR_WI3/work-items.json" <<'JSON'
+{
+  "items": [
+    {
+      "id": "mobile-1",
+      "title": "Mobile flow",
+      "spec": "specs/mobile-1/spec.md",
+      "tasks": "specs/mobile-1/tasks.md",
+      "priority": 1,
+      "status": "pending",
+      "dependencies": [],
+      "testing": {
+        "unit": ["pnpm test"],
+        "e2e": ["maestro test .maestro/smoke.yaml"],
+        "device": ["mcp device smoke-test ios"],
+        "notes": "Run device checks separately"
+      }
+    }
+  ]
+}
+JSON
+
+set_active_work_item_by_id "$TMPDIR_WI3" "mobile-1"
+assert_contains "testing summary includes e2e" "e2e: maestro test .maestro/smoke.yaml" "$ACTIVE_WORK_ITEM_TESTING_DETAILS"
+rendered_context=$(render_active_work_item_context)
+assert_contains "rendered context includes testing line" "- testing:" "$rendered_context"
+
+# ── merge_work_item_release ──────────────────────────────────────────────────
+
+suite "merge_work_item_release"
+
+TMPDIR_REPO=$(make_tmpdir)
+git -C "$TMPDIR_REPO" init -b main >/dev/null 2>&1
+git -C "$TMPDIR_REPO" config user.name "Test User"
+git -C "$TMPDIR_REPO" config user.email "test@example.com"
+printf 'base\n' > "$TMPDIR_REPO/note.txt"
+git -C "$TMPDIR_REPO" add note.txt
+git -C "$TMPDIR_REPO" commit -m "base" >/dev/null 2>&1
+git -C "$TMPDIR_REPO" switch -c "ralph/task-1" >/dev/null 2>&1
+printf 'task\n' >> "$TMPDIR_REPO/note.txt"
+git -C "$TMPDIR_REPO" commit -am "task work" >/dev/null 2>&1
+
+merge_work_item_release "$TMPDIR_REPO" "task-1" "ralph/task-1"
+assert_true "local merge fallback succeeds" "$?"
+
+current_branch=$(git -C "$TMPDIR_REPO" branch --show-current)
+assert_equals "returns to base branch" "main" "$current_branch"
+
+git -C "$TMPDIR_REPO" merge-base --is-ancestor "ralph/task-1" "main"
+assert_true "task branch is merged into main" "$?"
+
 print_test_summary

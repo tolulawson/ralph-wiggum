@@ -63,6 +63,36 @@ AI coding agents work autonomously:
 
 ---
 
+## Testing Policy
+
+Define testing expectations separately so unit, integration, E2E, and device checks
+do not get conflated.
+
+### Always Run
+- [e.g., `pnpm lint`]
+- [e.g., `pnpm typecheck`]
+
+### Unit Tests
+- Commands: [e.g., `pnpm test -- --runInBand`]
+- Scope rules: [e.g., "Run for all domain logic changes"]
+
+### Integration Tests
+- Commands: [e.g., `pnpm test:integration`]
+- Scope rules: [e.g., "Run when API or persistence behavior changes"]
+
+### End-to-End Tests
+- Commands: [e.g., `npx playwright test` or `maestro test .maestro/checkout.yaml`]
+- Scope rules: [e.g., "Run for auth, checkout, onboarding, and navigation changes"]
+
+### Device / Simulator Testing
+- Commands or tools: [e.g., `npx expo run:ios`, `mcp device smoke-test ios`, `agent-device run smoke`]
+- Scope rules: [e.g., "Required for native UI, permissions, camera, and push notifications"]
+
+### Skip Rules
+- [e.g., "Skip full E2E only for copy-only changes; explain why in the summary"]
+
+---
+
 ## Project Structure
 
 ```
@@ -149,7 +179,7 @@ Each iteration:
 6. Runs tests
 7. Verifies acceptance criteria
 8. Creates a local review-ready commit
-9. If `work-items.json` is present, the loop runtime pushes the task branch, opens or updates a draft PR, and waits for merge before the next task
+9. If `work-items.json` is present, the loop runtime pushes the task branch, opens or updates a draft PR, and attempts to merge it automatically before the next task
 10. If commit triggered a deploy (or if deploy needed to keep test/dev/prod updated), perform/watch deploy until successful (fix and re-commit+push+deploy as needed)
 11. Outputs `<promise>DONE</promise>` if successful
 12. Exits for fresh context
@@ -159,7 +189,7 @@ Each iteration:
 
 - Output `<promise>DONE</promise>` ONLY when task acceptance criteria are 100% met
 - Leave the branch clean and review-ready before outputting `<promise>DONE</promise>`
-- In work-item mode, the runtime owns push, draft PR creation, and merge waiting after `<promise>DONE</promise>`
+- In work-item mode, the runtime owns push, draft PR creation, and automatic merge attempts after `<promise>DONE</promise>`
 - The bash loop checks for this exact string
 - If not found, the loop continues with another iteration
 - This ensures tasks are truly complete before moving on

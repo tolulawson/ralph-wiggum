@@ -345,3 +345,93 @@
 - [x] Update `TELEGRAM_SETUP.md` so it no longer advertises deprecated unified-loop CLI flags.
 - [x] Reframe Telegram support as helper-library functionality unless the user wires it into a custom loop wrapper.
 - [x] Verify the setup docs no longer promise removed Telegram loop flags.
+
+## Default Runtime: Codex
+
+### Plan
+
+- [x] Change the unified loop's default runtime from Claude to Codex.
+- [x] Update help text and README examples to match the new default runtime.
+- [x] Verify the script help output reflects the new default.
+
+### Review
+
+- `scripts/ralph-loop.sh` now defaults to `codex` when `--runtime` and `RALPH_RUNTIME` are not provided.
+- The CLI help output now labels Codex as the default runtime and updates the `--runtime` option description accordingly.
+- `README.md` now explicitly says that bare `./scripts/ralph-loop.sh` runs Codex by default and includes a matching runtime-selection example.
+
+### Verification
+
+- `bash -n scripts/ralph-loop.sh`
+- `./scripts/ralph-loop.sh --help`
+
+## Skill Asset Location Clarity
+
+### Plan
+
+- [x] Make the install docs explicit that client projects keep one local copy of planning assets under `vendor/speckit-agent-skills/`.
+- [x] Clarify that the repo's top-level `skills/` directory is only for publishing/installing Ralph as an agent skill package and should not be copied into client projects.
+- [x] Fix stale upstream installer references in `skills/ralph-wiggum/SKILL.md`.
+- [x] Verify the updated docs consistently describe the single-location rule.
+
+### Review
+
+- `INSTALL.md` and `INSTALLATION.md` now explicitly say that client projects should keep planning assets only under `vendor/speckit-agent-skills/` and should not copy the repo's top-level `skills/` directory.
+- `README.md` now explains the difference between the copied project harness (`vendor/speckit-agent-skills/`) and the installer-facing `skills/` package.
+- `skills/ralph-wiggum/SKILL.md` now points installer commands at this fork and states that the skill package is separate from the client-project harness.
+
+### Verification
+
+- `rg -n "Do not also copy this repo's top-level|Do not also copy this repository's top-level|single local copy|installer-facing|tolulawson/ralph-wiggum" README.md INSTALL.md INSTALLATION.md skills/ralph-wiggum/SKILL.md`
+
+## Automatic Merge Workflow
+
+### Plan
+
+- [x] Replace the default human-merge handoff with an automatic merge attempt after successful implementation.
+- [x] Keep `awaiting_merge` only as a fallback state when automatic merge is blocked by permissions or repo rules.
+- [x] Update prompts and docs so the release workflow now describes automatic merge as the default.
+- [x] Add focused verification for the local automatic-merge fallback path.
+- [x] Capture the workflow preference change in `tasks/lessons.md`.
+
+### Review
+
+- `scripts/ralph-loop.sh` now tries to complete the release immediately after a successful work-item implementation: push branch, create or inspect the PR, then attempt an automatic merge.
+- If the runtime encounters an already-pending `awaiting_merge` item on the next run, it now tries that merge again before stopping.
+- `scripts/lib/release_workflow.sh` now includes `merge_work_item_release`, which merges via `gh pr merge` when possible and falls back to a local base-branch merge plus push when PR tooling is unavailable.
+- `awaiting_merge` remains in the state model only for blocked merges, so human intervention is now the exception rather than the default path.
+- `tasks/lessons.md` was added to capture the new rule: prefer configurable automation over hard-coded human merge gates.
+
+### Verification
+
+- `bash -n scripts/ralph-loop.sh scripts/lib/release_workflow.sh scripts/lib/work_items.sh templates/PROMPT_build.md templates/PROMPT_plan.md`
+- `bash tests/test_work_items.sh`
+- `bash tests/test_runtime_helpers.sh`
+- `rg -n "attempts to merge|Automatic merge is blocked|attempt to merge it automatically" README.md INSTALL.md INSTALLATION.md templates/PROMPT_build.md templates/PROMPT_plan.md templates/constitution-template.md scripts/ralph-loop.sh`
+
+## Testing Policy Controls
+
+### Plan
+
+- [x] Add a dedicated `Testing Policy` section to the constitution template so users can specify unit, integration, E2E, and device-testing details separately.
+- [x] Teach prompt generation to surface explicit testing policy details from the constitution into both planning and build mode.
+- [x] Expand `work-items.json` guidance so planning can store structured testing details separate from high-level `verification` tokens.
+- [x] Surface work-item-specific testing details in the active work item context during build mode.
+- [x] Update docs to explain how project owners can declare custom testing workflows (including Maestro, Agent Device Skills, and MCP-driven/device testing).
+- [x] Add focused tests for the new testing-policy prompt plumbing.
+
+### Review
+
+- Added a first-class `## Testing Policy` contract to the constitution template and the setup interview so projects can declare exact unit, integration, E2E, and device-testing expectations separately.
+- `scripts/lib/prompt_builder.sh` now extracts the constitution's `## Testing Policy` section and appends it to both build and plan prompts, with clear precedence rules over generic profile defaults.
+- Planning guidance in `templates/PROMPT_plan.md` now supports an optional structured `testing` object in each work item so exact commands for E2E and device checks stay separate from the high-level `verification` categories.
+- `scripts/lib/work_items.sh` now carries forward a compact testing summary for the active work item and includes it in the authoritative runtime-appended work-item context.
+- `scripts/lib/verification_profiles.sh` now recognizes richer mobile verification defaults, including Maestro plus MCP / agent-device-skill driven device checks.
+- Updated README and install docs so users know where to put custom testing policy and how to express mobile-specific E2E/device requirements.
+
+### Verification
+
+- `bash -n scripts/lib/prompt_builder.sh scripts/lib/work_items.sh scripts/lib/verification_profiles.sh`
+- `bash tests/test_prompt_builder.sh`
+- `bash tests/test_work_items.sh`
+- `bash tests/test_runtime_helpers.sh`

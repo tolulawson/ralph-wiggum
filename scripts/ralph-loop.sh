@@ -18,7 +18,7 @@ CONSTITUTION="$PROJECT_DIR/.specify/memory/constitution.md"
 # Configuration
 MAX_ITERATIONS=0
 MODE="build"
-RUNTIME="${RALPH_RUNTIME:-claude}"
+RUNTIME="${RALPH_RUNTIME:-codex}"
 MODEL_OVERRIDE=""
 TAIL_LINES=5
 TAIL_RENDERED_LINES=0
@@ -76,13 +76,13 @@ Usage:
   ./scripts/ralph-loop.sh [--runtime RUNTIME] plan --brief "Build an Expo app for field sales"
 
 Runtimes:
-  claude   Claude Code (default)
-  codex    OpenAI Codex CLI
+  codex    OpenAI Codex CLI (default)
+  claude   Claude Code
   gemini   Google Gemini CLI
   copilot  GitHub Copilot CLI
 
 Options:
-  --runtime RUNTIME   Select the AI runtime (default: claude)
+  --runtime RUNTIME   Select the AI runtime (default: codex)
   --model MODEL       Override the runtime model when the selected runtime supports it
   --reset-circuit     Reset the circuit breaker to CLOSED state and exit
   -h, --help          Show this help
@@ -321,8 +321,15 @@ while true; do
         reconcile_merged_pull_requests "$PROJECT_DIR"
 
         if find_awaiting_merge_item "$PROJECT_DIR"; then
-            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL" "$PROJECT_DIR"
-            exit $EXIT_AWAITING_MERGE
+            if merge_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER"; then
+                mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                echo -e "${GREEN}✓ Automatically merged pending work item '$ACTIVE_WORK_ITEM_ID'.${NC}"
+                reset_active_work_item
+            else
+                echo -e "${YELLOW}Warning: automatic merge is still blocked for '$ACTIVE_WORK_ITEM_ID'.${NC}"
+                print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
+                exit $EXIT_AWAITING_MERGE
+            fi
         fi
 
         if select_next_work_item "$PROJECT_DIR"; then
@@ -407,19 +414,29 @@ while true; do
                     if PR_INFO=$(ensure_draft_pull_request "$PROJECT_DIR" "$RELEASE_BRANCH" "$PR_TITLE" "$PR_BODY"); then
                         IFS=$'\t' read -r PR_NUMBER PR_URL PR_STATUS <<< "$PR_INFO"
                         if [[ "$PR_STATUS" = "merged" ]]; then
+                            sync_local_base_branch "$PROJECT_DIR" || true
                             mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
                             echo -e "${GREEN}✓ Pull request for $ACTIVE_WORK_ITEM_ID is already merged.${NC}"
+                        elif merge_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER"; then
+                            mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                            echo -e "${GREEN}✓ Pull request for $ACTIVE_WORK_ITEM_ID merged automatically.${NC}"
                         else
                             mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_URL" "$PR_NUMBER"
-                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER" "$PR_URL" "$PROJECT_DIR"
+                            echo -e "${YELLOW}Warning: automatic merge is blocked for '$ACTIVE_WORK_ITEM_ID'.${NC}"
+                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER" "$PR_URL" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
                             exit $EXIT_AWAITING_MERGE
                         fi
                     else
-                        echo -e "${YELLOW}Warning: could not create or inspect a draft pull request automatically.${NC}"
-                        echo -e "${YELLOW}The branch has been pushed. Open and merge a PR manually, then rerun the loop from the base branch.${NC}"
-                        mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
-                        print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "" "" "$PROJECT_DIR"
-                        exit $EXIT_AWAITING_MERGE
+                        if merge_work_item_release "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"; then
+                            mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                            echo -e "${GREEN}✓ Work item $ACTIVE_WORK_ITEM_ID merged directly without a PR.${NC}"
+                        else
+                            echo -e "${YELLOW}Warning: could not create a draft pull request or complete an automatic merge.${NC}"
+                            echo -e "${YELLOW}The branch has been pushed. Merge manually, then rerun the loop from the base branch.${NC}"
+                            mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
+                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "" "" "$PROJECT_DIR" "Automatic merge is blocked. Merge manually into"
+                            exit $EXIT_AWAITING_MERGE
+                        fi
                     fi
                 fi
             fi

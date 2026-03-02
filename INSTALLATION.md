@@ -62,6 +62,11 @@ After this step, the project has the complete local harness needed for:
 - deterministic planning via the vendored SpecKit planning assets
 - task-by-task branch / pull-request release handling driven by `work-items.json`
 
+Important: keep the planning assets in one place inside the client project:
+`vendor/speckit-agent-skills/`. Do not also copy this repository's top-level
+`skills/` directory into the project; that directory exists only so Ralph itself
+can be installed as a reusable agent skill package.
+
 ---
 
 ## Phase 3: Get Version Info
@@ -120,6 +125,19 @@ Present these conversationally, one at a time. **Keep it lightweight.**
 > "What's the tech stack? (Or should I figure it out from the codebase?)"
 
 **Note to AI:** For existing projects, analyze the codebase yourself. Don't pressure the user.
+
+---
+
+#### 4b. Testing Workflow (RECOMMENDED)
+
+> "Any special testing requirements I should encode separately from unit tests?
+>
+> Examples: exact integration commands, Playwright, Maestro, simulator checks,
+> MCP device flows, or agent-device skills."
+
+**Note to AI:** Capture exact commands when the user knows them. If they do not,
+offer sensible defaults based on the detected stack and note that they can refine
+the constitution's `## Testing Policy` later.
 
 ---
 
@@ -193,7 +211,7 @@ The constitution must be **concise**. It's the single source of truth — the ag
 **Ralph Loop Mode** (started by `./scripts/ralph-loop.sh`):
 - Pick highest priority incomplete spec from `specs/`
 - Implement, test, and create a review-ready local commit
-- If `work-items.json` exists: let the runtime push the task branch, open/update a draft PR, and wait for merge before the next task
+- If `work-items.json` exists: let the runtime push the task branch, open/update a draft PR, and attempt to merge it automatically before the next task
 - Output `<promise>DONE</promise>` only when 100% complete
 - Output `<promise>ALL_DONE</promise>` when no work remains
 - Output `<promise>BLOCKED:reason</promise>` when human help is required
@@ -213,6 +231,19 @@ The constitution must be **concise**. It's the single source of truth — the ag
 ## Technical Stack
 
 {List or "Detected from codebase"}
+
+---
+
+## Testing Policy
+
+Keep testing expectations explicit and separate by category.
+
+- Always Run: {e.g. `pnpm lint`, `pnpm typecheck`}
+- Unit Tests: {exact commands or "Use project defaults"}
+- Integration Tests: {exact commands or "When applicable"}
+- End-to-End Tests: {exact commands, such as Playwright or Maestro}
+- Device / Simulator Testing: {exact commands, MCP flows, or agent-device skills}
+- Skip Rules: {when a category may be skipped and how to document it}
 
 ---
 
@@ -250,7 +281,8 @@ Append a 1-line summary to `history.md` after each spec completion. For details,
 All acceptance criteria verified, tests pass, changes committed locally, branch left clean and review-ready → output `<promise>DONE</promise>`. Never output this until truly complete.
 
 If `work-items.json` is active, the loop runtime handles the release workflow after `<promise>DONE</promise>`:
-push the task branch, open or update a draft PR, and pause until that PR is merged.
+push the task branch, open or update a draft PR, and attempt to merge it automatically.
+Only if that merge is blocked should the item remain in `awaiting_merge`.
 
 If human help is required, output `<promise>BLOCKED:reason</promise>`.
 If a human decision is required, output `<promise>DECIDE:question</promise>`.
@@ -333,7 +365,7 @@ Same content as AGENTS.md.
 >
 > Ralph picks one task at a time, implements it, verifies acceptance criteria, creates a local review-ready commit, then pushes a task branch and opens or updates a draft PR when `work-items.json` is active.
 >
-> After you merge that PR and rerun the loop from the base branch, Ralph marks the task done and starts the next one.
+> Ralph then attempts to merge that task automatically. If repo rules block the merge, it stops and asks for manual intervention.
 
 | Task | Command |
 |------|---------|

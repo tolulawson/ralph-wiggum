@@ -23,7 +23,7 @@ verification_stack_summary() {
     local profile="$1"
     case "$profile" in
         web)      echo "lint → typecheck → unit tests → build → [e2e/browser]" ;;
-        expo)     echo "expo-doctor → Metro export → typecheck → unit tests → [simulator] → [Maestro]" ;;
+        expo)     echo "expo-doctor → Metro export → typecheck → unit tests → [simulator] → [Maestro] → [device MCP/agent skill]" ;;
         backend)  echo "lint → typecheck/static-analysis → unit tests → [integration tests] → build" ;;
         library)  echo "lint → typecheck → unit tests → build → package-exports" ;;
         *)        echo "lint → typecheck → tests → build (where applicable)" ;;
@@ -53,6 +53,8 @@ EOF
 - **Unit tests**: `jest` or `npm test`
 - **Simulator smoke test** (optional): `npx expo run:ios` or `npx expo run:android`
 - **Maestro flows** (when present): `maestro test .maestro/`
+- **Device / MCP testing** (when configured): run your configured device automation
+  through MCP tools or agent-device skills
 EOF
             ;;
         backend)
@@ -96,7 +98,7 @@ EOF
             ;;
         expo)
             cat <<'EOF'
-["expo-doctor", "metro-export", "typecheck", "unit-tests", "simulator-smoke-test", "maestro-flows"]
+["expo-doctor", "metro-export", "typecheck", "unit-tests", "simulator-smoke-test", "maestro-flows", "device-mcp", "agent-device-skills"]
 EOF
             ;;
         backend)

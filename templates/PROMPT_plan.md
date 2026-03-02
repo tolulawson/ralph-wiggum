@@ -41,7 +41,15 @@ programmatically without re-parsing markdown.
       "profile": "web|expo|backend|library|unknown",
       "status": "pending",
       "retry_count": 0,
-      "verification": ["lint", "typecheck", "test"],
+      "verification": ["lint", "typecheck", "unit-tests", "build"],
+      "testing": {
+        "unit": ["npm test -- --runInBand"],
+        "integration": [],
+        "e2e": ["maestro test .maestro/smoke.yaml"],
+        "device": ["mcp device smoke-test ios"],
+        "manual": [],
+        "notes": "Run E2E separately from unit tests when mobile flows change"
+      },
       "branch": "",
       "review_status": "pending",
       "pr_number": null,
@@ -59,10 +67,22 @@ programmatically without re-parsing markdown.
 - `dependencies` — list of `id` values this item must wait on; omit if none
 - `profile` — detect from the spec or constitution; default to `unknown`
 - `status` — always `"pending"` on first write; build mode moves items through
-  `in_progress` -> `awaiting_merge` -> `done`
+  `in_progress` -> `done` by default; use `awaiting_merge` only if automatic merge
+  is blocked and human intervention is still required
 - `retry_count` — always `0` on first write; build mode increments on failed attempts
 - `verification` — list of check types required; use any subset of:
-  `lint`, `typecheck`, `test`, `e2e`, `build`, `expo-doctor`, `smoke`
+  `lint`, `typecheck`, `unit-tests`, `integration-tests`, `e2e`, `build`,
+  `expo-doctor`, `metro-export`, `simulator-smoke-test`, `maestro-flows`,
+  `device-mcp`, `agent-device-skills`, `manual-qa`, `package-exports`
+- `testing` — optional structured testing details. Use it when the spec or
+  constitution provides exact commands or expectations that should remain separate
+  from the generic `verification` tokens.
+- `testing.unit` — exact unit-test commands, if any
+- `testing.integration` — exact integration-test commands, if any
+- `testing.e2e` — exact end-to-end commands, such as Playwright or Maestro
+- `testing.device` — simulator, MCP, agent-device-skill, or hardware checks
+- `testing.manual` — manual QA checks that cannot be automated cleanly
+- `testing.notes` — brief constraints, environment notes, or skip rules
 - `branch` — start as an empty string; build mode assigns the per-task branch
 - `review_status` — start as `"pending"`; build mode updates after implementation
 - `pr_number` / `pr_url` — start empty; build mode fills these when a draft PR is opened

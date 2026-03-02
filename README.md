@@ -42,10 +42,16 @@ Ralph Wiggum (in this flavour) combines **Geoffrey Huntley's original iterative 
 ### Current Architecture
 
 - One unified loop entrypoint: `./scripts/ralph-loop.sh`
+- Default runtime: Codex (`./scripts/ralph-loop.sh` without `--runtime`)
 - Runtime selection via `--runtime claude|codex|gemini|copilot`
 - Shared runtime helpers in `scripts/lib/`
 - Prompt templates in `templates/`
 - Vendored planning assets in `vendor/speckit-agent-skills/`
+
+Client projects should keep the planning assets in exactly one local place:
+`vendor/speckit-agent-skills/`. This repo's top-level `skills/` directory is not
+part of the copied harness; it exists only for publishing/installing Ralph itself
+as a reusable agent skill package.
 
 ---
 
@@ -88,8 +94,8 @@ The agent outputs `<promise>DONE</promise>` **ONLY** when:
 - Changes are committed locally and the branch is review-ready
 
 When `work-items.json` is active, the loop runtime then pushes the task branch,
-opens or updates a draft pull request, and pauses in an `awaiting_merge` state
-until that PR is merged.
+opens or updates a draft pull request, and attempts to merge it automatically.
+It only pauses in an `awaiting_merge` state if that automatic merge is blocked.
 
 The bash loop checks for this phrase. If not found, it retries.
 
@@ -187,6 +193,8 @@ directly from specs.
 The planning loop now vendors the canonical planning-related SpecKit skill
 definitions under `vendor/speckit-agent-skills/skills/`, so planning remains
 deterministic even when the machine does not have SpecKit installed globally.
+That vendored `vendor/` path is the single local copy inside a client project;
+the repo's own top-level `skills/` folder should not be copied there.
 
 ### 3. Run Build Mode
 
@@ -204,8 +212,26 @@ Each iteration:
 3. Implements it completely
 4. Verifies acceptance criteria and leaves a review-ready local commit
 5. Outputs `<promise>DONE</promise>` only if criteria pass
-6. The runtime pushes the task branch, opens or updates a draft PR, and waits for merge
-7. After you merge and rerun, Ralph marks the task done and starts the next one from the base branch
+6. The runtime pushes the task branch, opens or updates a draft PR, and attempts to merge it automatically
+7. If merge succeeds, Ralph marks the task done and moves to the next item in the next iteration
+8. If merge is blocked by repo rules or permissions, Ralph leaves the item in `awaiting_merge` and stops until you intervene
+
+### 4. Declare Custom Testing Policy
+
+If your project needs exact testing rules, define them in the constitution under
+`## Testing Policy`. This lets you keep unit, integration, E2E, and device testing
+separate.
+
+Examples:
+- web: require `pnpm lint`, `pnpm typecheck`, and `npx playwright test`
+- Expo/mobile: require `npx expo-doctor`, `maestro test .maestro/`, and device or MCP smoke checks
+- native/device-heavy: require Agent Device Skills or MCP-driven simulator flows in addition to unit tests
+
+When present, Ralph uses this precedence for verification:
+1. work-item `testing` details
+2. constitution `## Testing Policy`
+3. work-item `verification` categories
+4. profile defaults
 
 ### Logging (All Output Captured)
 
@@ -245,6 +271,7 @@ flags directly.
 ### Selecting a Runtime
 
 ```bash
+./scripts/ralph-loop.sh                  # Default: Codex
 ./scripts/ralph-loop.sh --runtime claude
 ./scripts/ralph-loop.sh --runtime codex
 ./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
@@ -313,6 +340,10 @@ The constitution and prompts adapt accordingly.
 ## Agent Skills Compatibility
 
 Ralph Wiggum follows the [Agent Skills specification](https://agentskills.io) and is compatible with:
+
+This installer-facing `skills/` package is for adding Ralph to an agent's skill
+registry. It is separate from the client-project harness, which only vendors
+`vendor/speckit-agent-skills/` locally for deterministic planning.
 
 | Installer | Command |
 |-----------|---------|

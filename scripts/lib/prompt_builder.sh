@@ -272,6 +272,19 @@ prompt_template_path() {
     echo "$project_dir/templates/PROMPT_${mode}.md"
 }
 
+extract_markdown_section() {
+    local file_path="$1"
+    local section_name="$2"
+
+    [[ -f "$file_path" ]] || return 1
+
+    awk -v heading="## ${section_name}" '
+        $0 == heading { capture = 1; next }
+        capture && /^## / { exit }
+        capture { print }
+    ' "$file_path"
+}
+
 append_plan_prompt_context() {
     local prompt_file="$1"
     local project_dir="$2"
@@ -365,7 +378,10 @@ $canonical_summary
    to \`"pending"\` and \`retry_count\` to \`0\`. Derive \`priority\` from spec ordering
    (001 = priority 1, 002 = priority 2, etc.). Infer \`profile\` from the spec content
    or constitution; default to \`"unknown"\`. List \`verification\` steps appropriate
-   for the detected profile. Initialize release fields for every item:
+   for the detected profile. When the spec or constitution provides explicit testing
+   requirements, also include a structured \`testing\` object that keeps unit,
+   integration, E2E, and device workflows separate. Initialize release fields for
+   every item:
    \`branch = ""\`, \`review_status = "pending"\`, \`pr_number = null\`,
    \`pr_url = ""\`, and \`merge_status = "not_requested"\`.
 9. Do not implement product code in this mode. Planning artifacts only.
@@ -414,6 +430,37 @@ you may skip it — but note which steps were skipped and why.
 EOF
 }
 
+append_testing_policy_context_to_build_prompt() {
+    local prompt_file="$1"
+    local project_dir="$2"
+    local constitution_path="$project_dir/.specify/memory/constitution.md"
+    local testing_policy
+
+    testing_policy=$(extract_markdown_section "$constitution_path" "Testing Policy" 2>/dev/null || true)
+    [[ -n "$testing_policy" ]] || return 0
+
+    cat >> "$prompt_file" <<EOF
+
+## Testing Policy
+
+The constitution defines explicit testing requirements for this project. Use them as
+the highest-priority testing instructions after any work-item-specific \`testing\`
+details.
+
+Testing precedence:
+1. Active work item's \`testing\` object (if present)
+2. Constitution \`## Testing Policy\`
+3. Active work item's \`verification\` list
+4. Generic project profile defaults
+
+$testing_policy
+
+If the constitution lists exact commands for E2E, device, or manual verification,
+run them separately from unit or integration tests and report each category clearly.
+
+EOF
+}
+
 append_plan_profile_context() {
     local prompt_file="$1"
     local profile="${PREFLIGHT_PROJECT_PROFILE:-unknown}"
@@ -434,9 +481,38 @@ Verification stack for **${profile}**: \`${stack}\`
 When writing work-items.json, assign appropriate \`verification\` arrays to each item
 based on this profile. Reference verification_profiles.sh for the canonical lists:
 - web:     ["lint", "typecheck", "unit-tests", "build", "e2e"]
-- expo:    ["expo-doctor", "metro-export", "typecheck", "unit-tests", "simulator-smoke-test", "maestro-flows"]
+- expo:    ["expo-doctor", "metro-export", "typecheck", "unit-tests", "simulator-smoke-test", "maestro-flows", "device-mcp", "agent-device-skills"]
 - backend: ["lint", "typecheck", "unit-tests", "integration-tests", "build"]
 - library: ["lint", "typecheck", "unit-tests", "build", "package-exports"]
+
+If the constitution defines a \`## Testing Policy\`, reflect it in a structured
+\`testing\` object on each relevant work item so exact E2E and device checks remain
+separate from the generic \`verification\` categories.
+
+EOF
+}
+
+append_testing_policy_context_to_plan_prompt() {
+    local prompt_file="$1"
+    local project_dir="$2"
+    local constitution_path="$project_dir/.specify/memory/constitution.md"
+    local testing_policy
+
+    testing_policy=$(extract_markdown_section "$constitution_path" "Testing Policy" 2>/dev/null || true)
+    [[ -n "$testing_policy" ]] || return 0
+
+    cat >> "$prompt_file" <<EOF
+
+## Testing Policy Overrides
+
+The constitution includes explicit testing guidance. Use it when generating both the
+\`verification\` array and any structured \`testing\` details for work items.
+
+When the policy distinguishes unit, integration, E2E, device, or manual testing,
+preserve that separation in \`work-items.json\` rather than collapsing everything
+into a single generic test step.
+
+$testing_policy
 
 EOF
 }
@@ -475,8 +551,10 @@ EOF
     if [[ "$mode" = "plan" ]]; then
         append_plan_prompt_context "$prompt_file" "$project_dir"
         append_plan_profile_context "$prompt_file"
+        append_testing_policy_context_to_plan_prompt "$prompt_file" "$project_dir"
     else
         append_verification_context_to_build_prompt "$prompt_file"
+        append_testing_policy_context_to_build_prompt "$prompt_file" "$project_dir"
     fi
 
     echo "$prompt_file"

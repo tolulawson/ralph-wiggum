@@ -50,10 +50,10 @@ Use Ralph Wiggum when:
 
 ```bash
 # Using Vercel's add-skill
-npx add-skill fstandhartinger/ralph-wiggum
+npx add-skill tolulawson/ralph-wiggum
 
 # Using OpenSkills
-openskills install fstandhartinger/ralph-wiggum
+openskills install tolulawson/ralph-wiggum
 ```
 
 ### Full Setup (Recommended)
@@ -73,6 +73,11 @@ The agent will guide you through a **lightweight, pleasant setup**:
 4. **Next Steps** — Clear guidance on creating specs and starting Ralph
 
 For existing projects, the agent detects your tech stack automatically. The interview prioritizes understanding *what you're building and why*.
+
+Note: this `skills/ralph-wiggum` package is the installer-facing wrapper for
+adding Ralph to an agent skill system. It is separate from the copied project
+harness, which keeps local planning assets in a single place under
+`vendor/speckit-agent-skills/`.
 
 ## Core Concepts
 

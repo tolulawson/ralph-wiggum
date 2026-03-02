@@ -24,12 +24,21 @@ do not pick a different task unless you emit `<promise>DECIDE:question</promise>
 ## Implementing the Work Item
 
 Implement the selected item completely, then verify all acceptance criteria and run any
-required tests (guided by the item's `verification` list if sourced from
-`work-items.json`, or by the spec's Completion Signal section otherwise).
+required tests. Use this order of precedence:
+
+1. the active work item's `testing` object (if present)
+2. the constitution's `## Testing Policy` section (if present)
+3. the active work item's `verification` list (if sourced from `work-items.json`)
+4. the spec's Completion Signal section
+5. the generic project profile defaults
+
+Keep unit, integration, E2E, and device testing separate when the project defines
+them separately. Do not collapse mobile E2E/device checks into generic unit tests.
 
 After a successful implementation, create a local commit for the finished work item.
 The loop runtime owns release-state transitions after your implementation succeeds:
-it will handle push, draft PR creation, and move the item into the merge-wait state.
+it will handle push, draft PR creation, and attempt to merge the work item automatically.
+Only if that merge is blocked should the item remain in a merge-wait state.
 Do not rely on manually setting `"status": "done"` in `work-items.json` during build mode.
 
 Before outputting `<promise>DONE</promise>`, perform a short self-review pass:

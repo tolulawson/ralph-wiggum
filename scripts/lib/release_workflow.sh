@@ -77,6 +77,13 @@ gh_pr_ready() {
     command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
 }
 
+git_remote_branch_exists() {
+    local project_dir="$1"
+    local branch="$2"
+
+    git -C "$project_dir" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1
+}
+
 build_pull_request_title() {
     local item_id="$1"
     local item_title="$2"
@@ -139,12 +146,72 @@ print(f"{number}\t{url}\t{status}")
 PY
 }
 
+sync_local_base_branch() {
+    local project_dir="$1"
+    local base_branch
+
+    base_branch=$(detect_base_branch "$project_dir")
+
+    git -C "$project_dir" switch "$base_branch" >/dev/null 2>&1 || return 1
+
+    if git_remote_branch_exists "$project_dir" "$base_branch"; then
+        git -C "$project_dir" pull --ff-only origin "$base_branch" >/dev/null 2>&1 || return 1
+    fi
+
+    return 0
+}
+
+merge_work_item_release() {
+    local project_dir="$1"
+    local item_id="$2"
+    local branch="$3"
+    local pr_number="${4:-}"
+
+    local base_branch
+    base_branch=$(detect_base_branch "$project_dir")
+
+    if [[ -n "$pr_number" ]] && gh_pr_ready; then
+        if (cd "$project_dir" && gh pr merge "$pr_number" --merge --delete-branch=false) >/dev/null 2>&1; then
+            sync_local_base_branch "$project_dir" || return 1
+            if [[ -n "$branch" ]] && git -C "$project_dir" merge-base --is-ancestor "$branch" "$base_branch" 2>/dev/null; then
+                return 0
+            fi
+            return 1
+        fi
+    fi
+
+    if [[ -z "$branch" ]]; then
+        return 1
+    fi
+
+    if ! git -C "$project_dir" show-ref --verify --quiet "refs/heads/$branch"; then
+        return 1
+    fi
+
+    if ! sync_local_base_branch "$project_dir"; then
+        return 1
+    fi
+
+    if git -C "$project_dir" merge-base --is-ancestor "$branch" "$base_branch" 2>/dev/null; then
+        return 0
+    fi
+
+    git -C "$project_dir" merge --no-ff --no-edit "$branch" >/dev/null 2>&1 || return 1
+
+    if git_remote_branch_exists "$project_dir" "$base_branch"; then
+        git -C "$project_dir" push origin "$base_branch" >/dev/null 2>&1 || return 1
+    fi
+
+    return 0
+}
+
 print_awaiting_merge_message() {
     local item_id="$1"
     local branch="$2"
     local pr_number="${3:-}"
     local pr_url="${4:-}"
     local project_dir="${5:-$(pwd)}"
+    local action_text="${6:-Merge this PR manually into}"
 
     echo ""
     echo -e "${YELLOW}⏸ Work item '${item_id}' is ready and awaiting merge.${NC}"
@@ -155,5 +222,5 @@ print_awaiting_merge_message() {
     if [[ -n "$pr_url" ]]; then
         echo -e "${YELLOW}URL:${NC}    $pr_url"
     fi
-    echo -e "${YELLOW}Merge this PR into $(detect_base_branch "$project_dir"), return to that branch, and rerun the loop.${NC}"
+    echo -e "${YELLOW}${action_text} $(detect_base_branch "$project_dir"), return to that branch, and rerun the loop.${NC}"
 }

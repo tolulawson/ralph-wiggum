@@ -14,6 +14,7 @@ ACTIVE_WORK_ITEM_REVIEW_STATUS=""
 ACTIVE_WORK_ITEM_PR_NUMBER=""
 ACTIVE_WORK_ITEM_PR_URL=""
 ACTIVE_WORK_ITEM_MERGE_STATUS=""
+ACTIVE_WORK_ITEM_TESTING_DETAILS=""
 
 reset_active_work_item() {
     ACTIVE_WORK_ITEM_ID=""
@@ -27,6 +28,7 @@ reset_active_work_item() {
     ACTIVE_WORK_ITEM_PR_NUMBER=""
     ACTIVE_WORK_ITEM_PR_URL=""
     ACTIVE_WORK_ITEM_MERGE_STATUS=""
+    ACTIVE_WORK_ITEM_TESTING_DETAILS=""
 }
 
 work_items_file_path() {
@@ -68,6 +70,20 @@ with open(path, "r", encoding="utf-8") as fh:
 
 sep = "\x1f"
 
+def testing_summary(item):
+    testing = item.get("testing")
+    if not isinstance(testing, dict):
+        return ""
+    parts = []
+    for key in ("unit", "integration", "e2e", "device", "manual"):
+        values = testing.get(key) or []
+        if values:
+            parts.append(f"{key}: {'; '.join(str(v) for v in values)}")
+    notes = testing.get("notes", "")
+    if notes:
+        parts.append(f"notes: {notes}")
+    return " | ".join(parts)
+
 for item in data.get("items", []):
     if item.get("id") != item_id:
         continue
@@ -83,6 +99,7 @@ for item in data.get("items", []):
         "" if item.get("pr_number") is None else str(item.get("pr_number")),
         item.get("pr_url", ""),
         item.get("merge_status", ""),
+        testing_summary(item),
     ]
     print(sep.join(fields))
     break
@@ -93,7 +110,7 @@ PY
 
     IFS=$'\x1f' read -r ACTIVE_WORK_ITEM_ID ACTIVE_WORK_ITEM_TITLE ACTIVE_WORK_ITEM_SPEC ACTIVE_WORK_ITEM_TASKS \
         ACTIVE_WORK_ITEM_PRIORITY ACTIVE_WORK_ITEM_STATUS ACTIVE_WORK_ITEM_BRANCH ACTIVE_WORK_ITEM_REVIEW_STATUS \
-        ACTIVE_WORK_ITEM_PR_NUMBER ACTIVE_WORK_ITEM_PR_URL ACTIVE_WORK_ITEM_MERGE_STATUS <<< "$result"
+        ACTIVE_WORK_ITEM_PR_NUMBER ACTIVE_WORK_ITEM_PR_URL ACTIVE_WORK_ITEM_MERGE_STATUS ACTIVE_WORK_ITEM_TESTING_DETAILS <<< "$result"
 
     return 0
 }
@@ -117,6 +134,20 @@ with open(path, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 
 sep = "\x1f"
+
+def testing_summary(item):
+    testing = item.get("testing")
+    if not isinstance(testing, dict):
+        return ""
+    parts = []
+    for key in ("unit", "integration", "e2e", "device", "manual"):
+        values = testing.get(key) or []
+        if values:
+            parts.append(f"{key}: {'; '.join(str(v) for v in values)}")
+    notes = testing.get("notes", "")
+    if notes:
+        parts.append(f"notes: {notes}")
+    return " | ".join(parts)
 
 items = data.get("items", [])
 by_id = {item.get("id"): item for item in items}
@@ -159,6 +190,7 @@ fields = [
     "" if item.get("pr_number") is None else str(item.get("pr_number")),
     item.get("pr_url", ""),
     item.get("merge_status", ""),
+    testing_summary(item),
 ]
 print(sep.join(fields))
 PY
@@ -168,7 +200,7 @@ PY
 
     IFS=$'\x1f' read -r ACTIVE_WORK_ITEM_ID ACTIVE_WORK_ITEM_TITLE ACTIVE_WORK_ITEM_SPEC ACTIVE_WORK_ITEM_TASKS \
         ACTIVE_WORK_ITEM_PRIORITY ACTIVE_WORK_ITEM_STATUS ACTIVE_WORK_ITEM_BRANCH ACTIVE_WORK_ITEM_REVIEW_STATUS \
-        ACTIVE_WORK_ITEM_PR_NUMBER ACTIVE_WORK_ITEM_PR_URL ACTIVE_WORK_ITEM_MERGE_STATUS <<< "$result"
+        ACTIVE_WORK_ITEM_PR_NUMBER ACTIVE_WORK_ITEM_PR_URL ACTIVE_WORK_ITEM_MERGE_STATUS ACTIVE_WORK_ITEM_TESTING_DETAILS <<< "$result"
 
     return 0
 }
@@ -192,6 +224,20 @@ with open(path, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 
 sep = "\x1f"
+
+def testing_summary(item):
+    testing = item.get("testing")
+    if not isinstance(testing, dict):
+        return ""
+    parts = []
+    for key in ("unit", "integration", "e2e", "device", "manual"):
+        values = testing.get(key) or []
+        if values:
+            parts.append(f"{key}: {'; '.join(str(v) for v in values)}")
+    notes = testing.get("notes", "")
+    if notes:
+        parts.append(f"notes: {notes}")
+    return " | ".join(parts)
 
 items = data.get("items", [])
 eligible = []
@@ -220,6 +266,7 @@ fields = [
     "" if item.get("pr_number") is None else str(item.get("pr_number")),
     item.get("pr_url", ""),
     item.get("merge_status", ""),
+    testing_summary(item),
 ]
 print(sep.join(fields))
 PY
@@ -229,7 +276,7 @@ PY
 
     IFS=$'\x1f' read -r ACTIVE_WORK_ITEM_ID ACTIVE_WORK_ITEM_TITLE ACTIVE_WORK_ITEM_SPEC ACTIVE_WORK_ITEM_TASKS \
         ACTIVE_WORK_ITEM_PRIORITY ACTIVE_WORK_ITEM_STATUS ACTIVE_WORK_ITEM_BRANCH ACTIVE_WORK_ITEM_REVIEW_STATUS \
-        ACTIVE_WORK_ITEM_PR_NUMBER ACTIVE_WORK_ITEM_PR_URL ACTIVE_WORK_ITEM_MERGE_STATUS <<< "$result"
+        ACTIVE_WORK_ITEM_PR_NUMBER ACTIVE_WORK_ITEM_PR_URL ACTIVE_WORK_ITEM_MERGE_STATUS ACTIVE_WORK_ITEM_TESTING_DETAILS <<< "$result"
 
     return 0
 }
@@ -374,10 +421,12 @@ different task unless you emit \`<promise>DECIDE:...</promise>\` and explain why
 - spec: \`$ACTIVE_WORK_ITEM_SPEC\`
 - tasks: \`$ACTIVE_WORK_ITEM_TASKS\`
 - branch: \`${ACTIVE_WORK_ITEM_BRANCH:-to-be-created}\`
+$(if [[ -n "$ACTIVE_WORK_ITEM_TESTING_DETAILS" ]]; then printf '%s\n' "- testing: \`$ACTIVE_WORK_ITEM_TESTING_DETAILS\`"; fi)
 
 Before you output \`<promise>DONE</promise>\`, complete a short self-review pass and
 make sure any remaining issues are non-blocking. The loop runtime owns the release
-workflow after your implementation succeeds (push, draft PR creation, merge wait).
+workflow after your implementation succeeds (push, draft PR creation, automatic
+merge when possible, manual fallback only if blocked).
 EOF
 }
 
