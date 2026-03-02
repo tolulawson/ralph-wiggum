@@ -6,6 +6,13 @@
 # orchestration layer that can ingest a PRD, notes file, or inline brief.
 #
 
+# Optionally load verification profile helpers if the file lives alongside this one.
+_PROMPT_BUILDER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+if [[ -f "$_PROMPT_BUILDER_DIR/verification_profiles.sh" ]]; then
+    # shellcheck source=./verification_profiles.sh
+    source "$_PROMPT_BUILDER_DIR/verification_profiles.sh"
+fi
+
 PLAN_PRD_FILE=""
 PLAN_NOTES_FILE=""
 PLAN_BRIEF=""
@@ -361,6 +368,66 @@ $canonical_summary
 EOF
 }
 
+append_verification_context_to_build_prompt() {
+    local prompt_file="$1"
+    local profile="${PREFLIGHT_PROJECT_PROFILE:-unknown}"
+
+    # Only append when we have a known profile to add useful guidance.
+    if [[ "$profile" = "unknown" ]]; then
+        return 0
+    fi
+
+    local stack
+    stack=$(verification_stack_summary "$profile")
+
+    local steps
+    steps=$(describe_verification_steps "$profile")
+
+    cat >> "$prompt_file" <<EOF
+
+## Verification Profile: ${profile}
+
+The detected project profile is **${profile}**.
+
+Before outputting \`<promise>DONE</promise>\`, run the verification stack for this
+profile and confirm each step passes:
+
+${steps}
+Abbreviated stack: \`${stack}\`
+
+If a step is not configured or not applicable to the specific change being made,
+you may skip it — but note which steps were skipped and why.
+
+EOF
+}
+
+append_plan_profile_context() {
+    local prompt_file="$1"
+    local profile="${PREFLIGHT_PROJECT_PROFILE:-unknown}"
+
+    local stack
+    stack=$(verification_stack_summary "$profile")
+
+    cat >> "$prompt_file" <<EOF
+
+## Detected Project Profile: ${profile}
+
+The auto-detected project profile is **${profile}** (from project structure analysis).
+Use this as the default profile when populating the \`profile\` field of work items
+unless a spec or the constitution specifies a different profile explicitly.
+
+Verification stack for **${profile}**: \`${stack}\`
+
+When writing work-items.json, assign appropriate \`verification\` arrays to each item
+based on this profile. Reference verification_profiles.sh for the canonical lists:
+- web:     ["lint", "typecheck", "unit-tests", "build", "e2e"]
+- expo:    ["expo-doctor", "metro-export", "typecheck", "unit-tests", "simulator-smoke-test", "maestro-flows"]
+- backend: ["lint", "typecheck", "unit-tests", "integration-tests", "build"]
+- library: ["lint", "typecheck", "unit-tests", "build", "package-exports"]
+
+EOF
+}
+
 build_runtime_prompt() {
     local mode="$1"
     local project_dir="$2"
@@ -394,6 +461,9 @@ EOF
 
     if [[ "$mode" = "plan" ]]; then
         append_plan_prompt_context "$prompt_file" "$project_dir"
+        append_plan_profile_context "$prompt_file"
+    else
+        append_verification_context_to_build_prompt "$prompt_file"
     fi
 
     echo "$prompt_file"

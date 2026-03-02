@@ -27,8 +27,19 @@ After a successful implementation, commit and push, increment the item's `retry_
 in `work-items.json` only when the iteration did NOT complete successfully, and set
 `"status": "done"` in `work-items.json` when you successfully finish it.
 
+## Verification
+
+Before outputting `<promise>DONE</promise>`, run the verification steps appropriate for
+the project profile.  The loop appends a **Verification Profile** section below this
+template whenever the project profile is known.  If no profile section is appended,
+fall back to running whatever validation commands are configured (`lint`, `typecheck`,
+`test`, `build`) and confirm they pass.
+
+- Skip a step only when it is genuinely not configured or not applicable to the change.
+- Document any skipped steps with a brief reason in your final summary.
+
 Output the appropriate terminal promise tag:
 
-- `<promise>DONE</promise>` when the work item is complete
+- `<promise>DONE</promise>` when the work item is complete **and** verification passes
 - `<promise>BLOCKED:reason</promise>` when a real blocker requires human help
 - `<promise>DECIDE:question</promise>` when a human decision is required

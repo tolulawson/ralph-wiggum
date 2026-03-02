@@ -56,12 +56,12 @@
 
 ### Phase 2: Promise Tags And Human Escalation
 
-- [ ] Adopt richer semantic promise handling inspired by the external loop:
+- [x] Adopt richer semantic promise handling inspired by the external loop:
   support `DONE`/`ALL_DONE`, `BLOCKED:<reason>`, and `DECIDE:<question>`.
-- [ ] Implement shared parsing helpers for completion and help-needed signals.
-- [ ] Surface `BLOCKED` and `DECIDE` as first-class loop exits with distinct exit codes.
-- [ ] Print actionable resume instructions when the loop exits for human help.
-- [ ] Update docs and prompts so all runtimes use the same promise contract.
+- [x] Implement shared parsing helpers for completion and help-needed signals.
+- [x] Surface `BLOCKED` and `DECIDE` as first-class loop exits with distinct exit codes.
+- [x] Print actionable resume instructions when the loop exits for human help.
+- [x] Update docs and prompts so all runtimes use the same promise contract.
 
 ### Phase 3: Preflight And Environment Validation
 
@@ -101,14 +101,14 @@
 
 ### Phase 7: Verification Profiles (Web + Expo First)
 
-- [ ] Introduce explicit execution/verification profiles:
+- [x] Introduce explicit execution/verification profiles:
   `web`, `expo`, `backend`, `library`.
-- [ ] For `web`, define the default validation stack:
+- [x] For `web`, define the default validation stack:
   lint, typecheck, unit tests, browser/e2e verification, and screenshots when relevant.
-- [ ] For `expo`, define a mobile-aware validation stack:
+- [x] For `expo`, define a mobile-aware validation stack:
   `expo-doctor`, Metro startup checks, simulator/emulator smoke tests, and optional Maestro flows.
-- [ ] Make planning assign a profile to each generated work item so build mode knows which validation path to run.
-- [ ] Ensure profile selection is visible in logs and summaries.
+- [x] Make planning assign a profile to each generated work item so build mode knows which validation path to run.
+- [x] Ensure profile selection is visible in logs and summaries.
 
 ### Phase 8: Direct SpecKit Script Execution
 

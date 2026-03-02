@@ -40,6 +40,7 @@ source "$SCRIPT_DIR/lib/prompt_builder.sh"
 source "$SCRIPT_DIR/lib/runtime_helpers.sh"
 source "$SCRIPT_DIR/lib/provider_adapters.sh"
 source "$SCRIPT_DIR/lib/preflight.sh"
+source "$SCRIPT_DIR/lib/verification_profiles.sh"
 source "$SCRIPT_DIR/lib/circuit_breaker.sh"
 source "$SCRIPT_DIR/lib/nr_of_tries.sh"
 CB_STATE_FILE="$PROJECT_DIR/.circuit_breaker_state"
@@ -311,6 +312,12 @@ if [ "$HAS_SPECS" = true ]; then
     echo -e "  ${GREEN}✓${NC} specs/ folder ($SPEC_COUNT specs) (final fallback)"
 else
     echo -e "  ${RED}✗${NC} specs/ folder (no .md files found)"
+fi
+if [[ "$MODE" = "build" && "${PREFLIGHT_PROJECT_PROFILE:-unknown}" != "unknown" ]]; then
+    echo ""
+    BANNER_VSTACK=$(verification_stack_summary "$PREFLIGHT_PROJECT_PROFILE")
+    echo -e "${BLUE}Verification profile:${NC} $PREFLIGHT_PROJECT_PROFILE"
+    echo -e "${BLUE}Verification stack:${NC}   $BANNER_VSTACK"
 fi
 echo ""
 echo -e "${CYAN}The loop checks for terminal promise tags in each iteration.${NC}"
