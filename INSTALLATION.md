@@ -41,9 +41,7 @@ RALPH_BOOTSTRAP_DIR="$(mktemp -d)"
 git clone --depth 1 "$RALPH_REPO_URL" "$RALPH_BOOTSTRAP_DIR/repo"
 
 cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/ralph-loop.sh" scripts/ralph-loop.sh
-cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/prompt_builder.sh" scripts/lib/prompt_builder.sh
-cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/runtime_helpers.sh" scripts/lib/runtime_helpers.sh
-cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/provider_adapters.sh" scripts/lib/provider_adapters.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/"*.sh scripts/lib/
 
 cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_build.md" templates/PROMPT_build.md
 cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_plan.md" templates/PROMPT_plan.md
@@ -62,6 +60,7 @@ After this step, the project has the complete local harness needed for:
 - unified runtime selection via `--runtime`
 - template-backed prompt generation
 - deterministic planning via the vendored SpecKit planning assets
+- task-by-task branch / pull-request release handling driven by `work-items.json`
 
 ---
 
@@ -130,7 +129,7 @@ Present these conversationally, one at a time. **Keep it lightweight.**
 >
 > **YOLO Mode** (recommended): Execute commands, modify files, run tests without asking each time.
 >
-> **Git Autonomy** (recommended): Commit and push automatically after each spec.
+> **Git Autonomy** (recommended): Create local commits automatically; the loop runtime pushes task branches and opens draft PRs when work items are ready.
 >
 > Enable both? (yes/no)"
 
@@ -193,7 +192,8 @@ The constitution must be **concise**. It's the single source of truth — the ag
 
 **Ralph Loop Mode** (started by `./scripts/ralph-loop.sh`):
 - Pick highest priority incomplete spec from `specs/`
-- Implement, test, commit, push
+- Implement, test, and create a review-ready local commit
+- If `work-items.json` exists: let the runtime push the task branch, open/update a draft PR, and wait for merge before the next task
 - Output `<promise>DONE</promise>` only when 100% complete
 - Output `<promise>ALL_DONE</promise>` when no work remains
 - Output `<promise>BLOCKED:reason</promise>` when human help is required
@@ -247,7 +247,10 @@ Append a 1-line summary to `history.md` after each spec completion. For details,
 
 ## Completion Signal
 
-All acceptance criteria verified, tests pass, changes committed and pushed → output `<promise>DONE</promise>`. Never output this until truly complete.
+All acceptance criteria verified, tests pass, changes committed locally, branch left clean and review-ready → output `<promise>DONE</promise>`. Never output this until truly complete.
+
+If `work-items.json` is active, the loop runtime handles the release workflow after `<promise>DONE</promise>`:
+push the task branch, open or update a draft PR, and pause until that PR is merged.
 
 If human help is required, output `<promise>BLOCKED:reason</promise>`.
 If a human decision is required, output `<promise>DECIDE:question</promise>`.
@@ -328,7 +331,9 @@ Same content as AGENTS.md.
 >
 > **To start the loop:** `./scripts/ralph-loop.sh`
 >
-> Ralph picks specs, implements them, verifies acceptance criteria, commits, pushes, and moves to the next — all autonomously.
+> Ralph picks one task at a time, implements it, verifies acceptance criteria, creates a local review-ready commit, then pushes a task branch and opens or updates a draft PR when `work-items.json` is active.
+>
+> After you merge that PR and rerun the loop from the base branch, Ralph marks the task done and starts the next one.
 
 | Task | Command |
 |------|---------|

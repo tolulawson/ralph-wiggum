@@ -119,10 +119,10 @@ ensure_draft_pull_request() {
     base_branch=$(detect_base_branch "$project_dir")
 
     local existing_json
-    existing_json=$(gh pr view --head "$branch" --json number,url,state,mergedAt 2>/dev/null || true)
+    existing_json=$(cd "$project_dir" && gh pr view --head "$branch" --json number,url,state,mergedAt 2>/dev/null || true)
     if [[ -z "$existing_json" ]]; then
-        gh pr create --draft --base "$base_branch" --head "$branch" --title "$pr_title" --body "$pr_body" >/dev/null 2>&1 || return 1
-        existing_json=$(gh pr view --head "$branch" --json number,url,state,mergedAt 2>/dev/null || true)
+        (cd "$project_dir" && gh pr create --draft --base "$base_branch" --head "$branch" --title "$pr_title" --body "$pr_body") >/dev/null 2>&1 || return 1
+        existing_json=$(cd "$project_dir" && gh pr view --head "$branch" --json number,url,state,mergedAt 2>/dev/null || true)
         [[ -n "$existing_json" ]] || return 1
     fi
 
@@ -144,6 +144,7 @@ print_awaiting_merge_message() {
     local branch="$2"
     local pr_number="${3:-}"
     local pr_url="${4:-}"
+    local project_dir="${5:-$(pwd)}"
 
     echo ""
     echo -e "${YELLOW}⏸ Work item '${item_id}' is ready and awaiting merge.${NC}"
@@ -154,5 +155,5 @@ print_awaiting_merge_message() {
     if [[ -n "$pr_url" ]]; then
         echo -e "${YELLOW}URL:${NC}    $pr_url"
     fi
-    echo -e "${YELLOW}Merge this PR into $(detect_base_branch "$(pwd)"), return to that branch, and rerun the loop.${NC}"
+    echo -e "${YELLOW}Merge this PR into $(detect_base_branch "$project_dir"), return to that branch, and rerun the loop.${NC}"
 }

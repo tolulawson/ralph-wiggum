@@ -1,0 +1,6 @@
+# Ephemeral Ralph loop runtime artifacts
+logs/
+.circuit_breaker_state
+
+# macOS metadata
+.DS_Store

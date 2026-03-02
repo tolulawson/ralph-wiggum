@@ -407,9 +407,11 @@ for item in data.get("items", []):
     if item.get("status") not in {"awaiting_merge", "pr_open"}:
         continue
     pr_number = item.get("pr_number")
-    if pr_number in (None, ""):
+    branch = item.get("branch", "")
+    if pr_number in (None, "") and not branch:
         continue
-    print(f"{item.get('id','')}\t{pr_number}\t{item.get('title','')}")
+    pr_value = "" if pr_number in (None, "") else str(pr_number)
+    print(f"{item.get('id','')}\t{pr_value}\t{item.get('title','')}")
 PY
     )
 
@@ -426,7 +428,7 @@ PY
         local merged_state="open"
         if [[ -n "$pr_number" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
             local pr_json
-            pr_json=$(gh pr view "$pr_number" --json number,url,state,mergedAt 2>/dev/null || true)
+            pr_json=$(cd "$project_dir" && gh pr view "$pr_number" --json number,url,state,mergedAt 2>/dev/null || true)
             if [[ -n "$pr_json" ]]; then
                 merged_state=$(
                     _work_item_python <<'PY' "$pr_json"

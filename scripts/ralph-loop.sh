@@ -321,7 +321,7 @@ while true; do
         reconcile_merged_pull_requests "$PROJECT_DIR"
 
         if find_awaiting_merge_item "$PROJECT_DIR"; then
-            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL"
+            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL" "$PROJECT_DIR"
             exit $EXIT_AWAITING_MERGE
         fi
 
@@ -373,7 +373,11 @@ while true; do
         if has_completion_promise; then
             DETECTED_SIGNAL="<promise>${LAST_PROMISE_SIGNAL}</promise>"
             echo -e "${GREEN}✓ Completion signal detected: ${DETECTED_SIGNAL}${NC}"
-            echo -e "${GREEN}✓ Task completed successfully!${NC}"
+            if [[ "$MODE" = "build" && -n "$ACTIVE_WORK_ITEM_ID" ]]; then
+                echo -e "${GREEN}✓ Implementation for work item '$ACTIVE_WORK_ITEM_ID' is ready for release workflow.${NC}"
+            else
+                echo -e "${GREEN}✓ Task completed successfully!${NC}"
+            fi
             CONSECUTIVE_FAILURES=0
             ITER_STATUS="$LAST_PROMISE_SIGNAL"
             DONE_COUNT=$((DONE_COUNT + 1))
@@ -407,14 +411,14 @@ while true; do
                             echo -e "${GREEN}✓ Pull request for $ACTIVE_WORK_ITEM_ID is already merged.${NC}"
                         else
                             mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_URL" "$PR_NUMBER"
-                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER" "$PR_URL"
+                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER" "$PR_URL" "$PROJECT_DIR"
                             exit $EXIT_AWAITING_MERGE
                         fi
                     else
                         echo -e "${YELLOW}Warning: could not create or inspect a draft pull request automatically.${NC}"
                         echo -e "${YELLOW}The branch has been pushed. Open and merge a PR manually, then rerun the loop from the base branch.${NC}"
                         mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
-                        print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
+                        print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "" "" "$PROJECT_DIR"
                         exit $EXIT_AWAITING_MERGE
                     fi
                 fi

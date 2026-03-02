@@ -33,7 +33,7 @@ Ralph Wiggum (in this flavour) combines **Geoffrey Huntley's original iterative 
 
 ### Key Features
 
-- 🔄 **Iterative Self-Correction** — Each loop picks ONE task, implements it, verifies, and commits
+- 🔄 **Iterative Self-Correction** — Each loop picks ONE task, implements it, verifies it, and leaves a review-ready commit
 - 📋 **Spec-Driven Development** — Professional specifications with clear acceptance criteria
 - 🎯 **Completion Verification** — Agent only outputs `<promise>DONE</promise>` when criteria are 100% met
 - 🧠 **Fresh Context Each Loop** — Every iteration starts with a clean context window
@@ -66,8 +66,8 @@ Based on [Geoffrey Huntley's methodology](https://github.com/ghuntley/how-to-ral
 │         ┌────────────────────────────────────────┘         │
 │         ▼                                                   │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │   Verify     │───▶│   Commit     │───▶│  Output DONE │  │
-│  │  Criteria    │    │   & Push     │    │  (if passed) │  │
+│  │   Verify     │───▶│ Commit Local │───▶│  Output DONE │  │
+│  │  Criteria    │    │  Review-Ready│    │  (if passed) │  │
 │  └──────────────┘    └──────────────┘    └──────────────┘  │
 │                                                   │         │
 │         ┌────────────────────────────────────────┘         │
@@ -85,7 +85,11 @@ Based on [Geoffrey Huntley's methodology](https://github.com/ghuntley/how-to-ral
 The agent outputs `<promise>DONE</promise>` **ONLY** when:
 - All acceptance criteria are verified
 - Tests pass
-- Changes are committed and pushed
+- Changes are committed locally and the branch is review-ready
+
+When `work-items.json` is active, the loop runtime then pushes the task branch,
+opens or updates a draft pull request, and pauses in an `awaiting_merge` state
+until that PR is merged.
 
 The bash loop checks for this phrase. If not found, it retries.
 
@@ -196,11 +200,12 @@ deterministic even when the machine does not have SpecKit installed globally.
 
 Each iteration:
 1. Picks the highest priority task
-2. Implements it completely
-3. Verifies acceptance criteria
-4. Outputs `<promise>DONE</promise>` only if criteria pass
-5. Bash loop checks for the phrase
-6. Context cleared, next iteration starts
+2. Creates or switches to that task's branch (when `work-items.json` is present)
+3. Implements it completely
+4. Verifies acceptance criteria and leaves a review-ready local commit
+5. Outputs `<promise>DONE</promise>` only if criteria pass
+6. The runtime pushes the task branch, opens or updates a draft PR, and waits for merge
+7. After you merge and rerun, Ralph marks the task done and starts the next one from the base branch
 
 ### Logging (All Output Captured)
 

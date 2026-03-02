@@ -148,15 +148,18 @@ Each iteration:
 5. Puts concise notes into `history/` (e.g., lessons learned). These notes help future iterations understand what previous attempts did
 6. Runs tests
 7. Verifies acceptance criteria
-8. Commits and pushes
-9. If commit triggered a deploy (or if deploy needed to keep test/dev/prod updated), perform/watch deploy until successful (fix and re-commit+push+deploy as needed)
-10. Outputs `<promise>DONE</promise>` if successful
-11. Exits for fresh context
-12. Loop restarts
+8. Creates a local review-ready commit
+9. If `work-items.json` is present, the loop runtime pushes the task branch, opens or updates a draft PR, and waits for merge before the next task
+10. If commit triggered a deploy (or if deploy needed to keep test/dev/prod updated), perform/watch deploy until successful (fix and re-commit+push+deploy as needed)
+11. Outputs `<promise>DONE</promise>` if successful
+12. Exits for fresh context
+13. Loop restarts
 
 ### Completion Signal Rules
 
 - Output `<promise>DONE</promise>` ONLY when task acceptance criteria are 100% met
+- Leave the branch clean and review-ready before outputting `<promise>DONE</promise>`
+- In work-item mode, the runtime owns push, draft PR creation, and merge waiting after `<promise>DONE</promise>`
 - The bash loop checks for this exact string
 - If not found, the loop continues with another iteration
 - This ensures tasks are truly complete before moving on

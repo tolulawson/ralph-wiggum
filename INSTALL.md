@@ -44,9 +44,7 @@ git clone --depth 1 "$RALPH_REPO_URL" "$RALPH_BOOTSTRAP_DIR/repo"
 mkdir -p scripts/lib templates vendor
 
 cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/ralph-loop.sh" scripts/ralph-loop.sh
-cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/prompt_builder.sh" scripts/lib/prompt_builder.sh
-cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/runtime_helpers.sh" scripts/lib/runtime_helpers.sh
-cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/provider_adapters.sh" scripts/lib/provider_adapters.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/"*.sh scripts/lib/
 
 cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_build.md" templates/PROMPT_build.md
 cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_plan.md" templates/PROMPT_plan.md
@@ -63,7 +61,8 @@ rm -rf "$RALPH_BOOTSTRAP_DIR"
 
 This installs the current harness layout:
 - `scripts/ralph-loop.sh` as the single loop entrypoint
-- `scripts/lib/*.sh` for shared runtime, prompt, and provider logic
+- `scripts/lib/*.sh` for shared runtime, prompt, provider, preflight, work-item,
+  and release-workflow logic
 - `templates/` for prompt and constitution templates
 - `vendor/speckit-agent-skills/` for deterministic planning assets
 
@@ -168,5 +167,10 @@ Same content as AGENTS.md.
 1. Create specs with `/speckit.specify [feature description]`
 2. Run `./scripts/ralph-loop.sh` to start building
 3. Switch runtimes with `--runtime`, for example `./scripts/ralph-loop.sh --runtime codex`
+
+When `work-items.json` is present, Ralph works one task at a time:
+it creates a dedicated task branch, pushes that branch only after a successful
+implementation pass, opens or updates a draft PR, and waits for merge before
+starting the next task.
 
 See the full [README](README.md) for detailed usage.
