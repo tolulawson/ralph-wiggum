@@ -112,11 +112,25 @@
 
 ### Phase 8: Direct SpecKit Script Execution
 
-- [ ] Move beyond prompt-driven planning by calling local `.specify/scripts/bash/*.sh` helpers directly when present.
-- [ ] Prefer vendored in-repo SpecKit assets first, then project-local `.specify`, then global installs, then manual emulation.
-- [ ] Add wrapper helpers for:
+- [x] Move beyond prompt-driven planning by calling local `.specify/scripts/bash/*.sh` helpers directly when present.
+- [x] Prefer vendored in-repo SpecKit assets first, then project-local `.specify`, then global installs, then manual emulation.
+- [x] Add wrapper helpers for:
   feature creation, prerequisite checks, plan setup, and agent context updates.
-- [ ] Keep prompt-driven emulation only as a fallback, not the primary path.
+- [x] Keep prompt-driven emulation only as a fallback, not the primary path.
+
+### Phase 8 Review
+
+- Added `scripts/lib/speckit_runner.sh` with `discover_speckit_scripts`, `run_speckit_feature_create`, `run_speckit_prereqs`, `run_speckit_plan_setup`, and `run_speckit_context_update` helpers.
+- `ralph-loop.sh` sources the new library and, in plan mode, directly calls `check-prereqs.sh` and `update-context.sh` when present before the AI is invoked.
+- `prompt_builder.sh` sources `speckit_runner.sh` and includes a `speckit_runner_prompt_block` in the plan prompt — when scripts exist the AI is instructed to call them directly (via Bash tool); otherwise it uses prompt-driven emulation.
+- The startup banner in plan mode now shows the SpecKit script runner status.
+- All scripts pass `bash -n` syntax checks.
+
+### Phase 8 Verification
+
+- `bash -n scripts/lib/speckit_runner.sh scripts/lib/prompt_builder.sh scripts/ralph-loop.sh`
+- `source scripts/lib/speckit_runner.sh && discover_speckit_scripts "$(pwd)" && echo "$SPECKIT_RUNNER_STATUS"`
+- `./scripts/ralph-loop.sh --help`
 
 ### Phase 9: Tests And Regression Coverage
 

@@ -12,6 +12,10 @@ if [[ -f "$_PROMPT_BUILDER_DIR/verification_profiles.sh" ]]; then
     # shellcheck source=./verification_profiles.sh
     source "$_PROMPT_BUILDER_DIR/verification_profiles.sh"
 fi
+if [[ -f "$_PROMPT_BUILDER_DIR/speckit_runner.sh" ]]; then
+    # shellcheck source=./speckit_runner.sh
+    source "$_PROMPT_BUILDER_DIR/speckit_runner.sh"
+fi
 
 PLAN_PRD_FILE=""
 PLAN_NOTES_FILE=""
@@ -282,6 +286,7 @@ append_plan_prompt_context() {
 - Intake summary: $PLAN_INPUT_SUMMARY
 - Spec Kit assets: $SPECKIT_STATUS
 - Spec Kit source preference: $SPECKIT_PRIMARY_SOURCE
+- Spec Kit script runner: $(speckit_runner_status_line 2>/dev/null || echo "unavailable")
 
 EOF
 
@@ -307,6 +312,12 @@ Use these in-repo skill files as the canonical planning source of truth:
 - \`$VENDORED_SPECKIT_DIR/speckit-tasks/SKILL.md\`
 
 EOF
+    fi
+
+    # Append SpecKit direct-script guidance (Phase 8).
+    if declare -f speckit_runner_prompt_block >/dev/null 2>&1; then
+        speckit_runner_prompt_block >> "$prompt_file"
+        echo "" >> "$prompt_file"
     fi
 
     if [[ "$SPECKIT_PRIMARY_SOURCE" = "vendored" ]]; then

@@ -43,6 +43,7 @@ source "$SCRIPT_DIR/lib/preflight.sh"
 source "$SCRIPT_DIR/lib/verification_profiles.sh"
 source "$SCRIPT_DIR/lib/circuit_breaker.sh"
 source "$SCRIPT_DIR/lib/nr_of_tries.sh"
+source "$SCRIPT_DIR/lib/speckit_runner.sh"
 CB_STATE_FILE="$PROJECT_DIR/.circuit_breaker_state"
 reset_plan_mode_state
 
@@ -249,6 +250,27 @@ echo -e "${BLUE}Preflight:${NC}"
 run_preflight "$PROJECT_DIR" "$CONSTITUTION" "$MODE" || exit 1
 echo ""
 
+# Phase 8: Discover and directly invoke SpecKit bash helpers when available.
+# This must run after preflight (project dir is validated) and before prompt
+# building so that discover_speckit_scripts() populates SPECKIT_SCRIPTS_DIR
+# which prompt_builder uses when constructing the plan-mode prompt.
+discover_speckit_scripts "$PROJECT_DIR"
+if [[ "$MODE" = "plan" && "$SPECKIT_RUNNER_STATUS" = "direct" ]]; then
+    echo -e "${BLUE}SpecKit scripts:${NC} found at $SPECKIT_SCRIPTS_DIR"
+    if has_speckit_script "check-prereqs.sh"; then
+        echo -e "  Running check-prereqs.sh directly..."
+        run_speckit_prereqs || true
+    fi
+    if has_speckit_script "update-context.sh"; then
+        echo -e "  Running update-context.sh directly..."
+        run_speckit_context_update || true
+    fi
+    echo ""
+elif [[ "$MODE" = "plan" ]]; then
+    echo -e "${BLUE}SpecKit scripts:${NC} not found — using prompt-driven emulation"
+    echo ""
+fi
+
 PROMPT_FILE=$(build_runtime_prompt "$MODE" "$PROJECT_DIR" "$LOG_DIR")
 if [ ! -f "$PROMPT_FILE" ]; then
     echo -e "${RED}Error: failed to build runtime prompt${NC}"
@@ -288,6 +310,7 @@ echo -e "${BLUE}Log:${NC}      $SESSION_LOG"
 if [ "$MODE" = "plan" ]; then
     echo -e "${BLUE}Plan input:${NC} $PLAN_INPUT_KIND"
     echo -e "${BLUE}SpecKit:${NC}   $SPECKIT_STATUS"
+    echo -e "${BLUE}SpecKit scripts:${NC} $(speckit_runner_status_line)"
 fi
 echo ""
 echo -e "${BLUE}Custom Instructions:${NC}"
