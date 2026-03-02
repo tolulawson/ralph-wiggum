@@ -46,13 +46,13 @@
 
 ### Phase 1: Core Runtime Consolidation
 
-- [ ] Extract the duplicated loop control flow from all provider scripts into a shared runtime library.
-- [ ] Define a single loop state machine with explicit states:
+- [x] Extract the duplicated loop control flow from all provider scripts into a shared runtime library.
+- [x] Define a single loop state machine with explicit states:
   `RUNNING`, `DONE`, `BLOCKED`, `DECIDE`, `MAX_ITERATIONS`, `FAILED_PREFLIGHT`, `FAILED_PROVIDER`.
-- [ ] Convert provider scripts into thin adapters that only define:
+- [x] Convert provider scripts into thin adapters that only define:
   CLI command shape, model flags, output capture mode, and provider-specific parsing.
-- [ ] Remove root-level prompt file generation everywhere and standardize on ephemeral prompt artifacts in `logs/`.
-- [ ] Normalize spec discovery across providers (same recursion rules, same precedence between `IMPLEMENTATION_PLAN.md` and `specs/`).
+- [x] Remove root-level prompt file generation everywhere and standardize on ephemeral prompt artifacts in `logs/`.
+- [x] Normalize spec discovery across providers (same recursion rules, same precedence between `IMPLEMENTATION_PLAN.md` and `specs/`).
 
 ### Phase 2: Promise Tags And Human Escalation
 
