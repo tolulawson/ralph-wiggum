@@ -75,12 +75,38 @@
 
 ### Phase 4: Runtime Observability And Operator UX
 
-- [ ] Port the strongest external runtime UX concepts into shared modules:
+- [x] Port the strongest external runtime UX concepts into shared modules:
   rolling output preview, live status labeling, and timing summaries.
-- [ ] Reuse the existing `timing` ideas but move them into a common runtime path instead of provider-specific duplication.
-- [ ] Standardize session and per-iteration logs for all providers.
-- [ ] Add a concise end-of-iteration summary section that persists after each loop.
-- [ ] Keep the UX layer optional and non-blocking so headless runs stay simple.
+- [x] Reuse the existing `timing` ideas but move them into a common runtime path instead of provider-specific duplication.
+- [x] Standardize session and per-iteration logs for all providers.
+- [x] Add a concise end-of-iteration summary section that persists after each loop.
+- [x] Keep the UX layer optional and non-blocking so headless runs stay simple.
+
+### Phase 4 Review
+
+- Added `scripts/lib/observability.sh` as a dedicated shared UX module containing:
+  `format_duration`, `get_elapsed`, `print_iter_summary`, `append_iter_to_summary_log`,
+  `print_session_summary`, `watch_latest_output`, `print_latest_output`.
+- `watch_latest_output` now accepts `iteration`, `max_iterations`, and `iter_start_epoch`
+  parameters, giving the live preview a labeled status line (e.g. "iter 3/10 +12s").
+- `print_iter_summary` prints a persistent boxed summary after every iteration showing
+  status (color-coded), duration, files changed, optional signal detail, and wall time.
+- `append_iter_to_summary_log` writes one machine-readable line per iteration to a
+  dedicated `logs/*_summary_*.log` file for post-session analysis.
+- `print_session_summary` prints a final summary banner with total iterations, elapsed
+  time, and done/no-signal/failed counts.
+- `ralph-loop.sh` now tracks `SESSION_START_TIME`, `ITER_START_TIME`, `DONE_COUNT`,
+  `NO_SIGNAL_COUNT`, and `FAILED_COUNT` and wires them through the unified loop.
+- The rolling live preview and static tail preview were removed from `ralph-loop.sh`
+  and consolidated into the shared `observability.sh` module.
+- All UX output is guarded by TTY checks; headless/pipe runs are unaffected.
+
+### Phase 4 Verification
+
+- `bash -n scripts/lib/observability.sh scripts/ralph-loop.sh`
+- `bash -c 'source scripts/lib/observability.sh && print_iter_summary 1 DONE 42 5'`
+- `bash -c 'source scripts/lib/observability.sh && print_session_summary 5 300 2 2 1 "Claude Code"'`
+- `./scripts/ralph-loop.sh --help`
 
 ### Phase 5: Stuck-Loop Protection
 
@@ -246,6 +272,17 @@
 
 - `rg -n "fstandhartinger/ralph-wiggum|ralph-loop-codex.sh|ralph-loop-gemini.sh|ralph-loop-copilot.sh" README.md INSTALL.md`
 - `rg -n -- "--telegram-audio|--no-telegram" README.md INSTALL.md`
+
+## PR + Merge Workflow
+
+### Plan
+
+- [ ] Add shared helpers for `work-items.json` state transitions, task selection, and merge reconciliation.
+- [ ] Add release workflow helpers for task branches and draft PR creation/update via `gh`.
+- [ ] Refactor the loop so `work-items.json` drives one-task-at-a-time branching, push, PR, and merge waiting.
+- [ ] Change build-mode prompts/schema so the runtime, not the agent, owns release-state transitions after implementation succeeds.
+- [ ] Update docs/templates to describe the new task branch and merge workflow.
+- [ ] Run syntax checks plus focused smoke tests for the new work-item and PR helpers.
 
 ## Installation + Telegram Docs Alignment
 

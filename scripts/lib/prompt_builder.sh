@@ -365,7 +365,9 @@ $canonical_summary
    to \`"pending"\` and \`retry_count\` to \`0\`. Derive \`priority\` from spec ordering
    (001 = priority 1, 002 = priority 2, etc.). Infer \`profile\` from the spec content
    or constitution; default to \`"unknown"\`. List \`verification\` steps appropriate
-   for the detected profile.
+   for the detected profile. Initialize release fields for every item:
+   \`branch = ""\`, \`review_status = "pending"\`, \`pr_number = null\`,
+   \`pr_url = ""\`, and \`merge_status = "not_requested"\`.
 9. Do not implement product code in this mode. Planning artifacts only.
 
 ## Output Rules

@@ -17,15 +17,25 @@ Select the highest-priority incomplete work item using this lookup order:
 3. **`specs/`** folder — read specs in numerical order and pick the first whose
    acceptance criteria are not yet satisfied.
 
+If the loop appends an **Active Work Item** section below this template, that item is
+already selected for this iteration. Treat that appended section as authoritative and
+do not pick a different task unless you emit `<promise>DECIDE:question</promise>`.
+
 ## Implementing the Work Item
 
 Implement the selected item completely, then verify all acceptance criteria and run any
 required tests (guided by the item's `verification` list if sourced from
 `work-items.json`, or by the spec's Completion Signal section otherwise).
 
-After a successful implementation, commit and push, increment the item's `retry_count`
-in `work-items.json` only when the iteration did NOT complete successfully, and set
-`"status": "done"` in `work-items.json` when you successfully finish it.
+After a successful implementation, create a local commit for the finished work item.
+The loop runtime owns release-state transitions after your implementation succeeds:
+it will handle push, draft PR creation, and move the item into the merge-wait state.
+Do not rely on manually setting `"status": "done"` in `work-items.json` during build mode.
+
+Before outputting `<promise>DONE</promise>`, perform a short self-review pass:
+- fix anything that is clearly blocking correctness, safety, or acceptance criteria
+- do not stall on minor non-critical polish issues
+- leave the branch in a clean, review-ready state for the runtime handoff
 
 ## Verification
 

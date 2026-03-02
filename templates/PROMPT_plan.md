@@ -41,7 +41,12 @@ programmatically without re-parsing markdown.
       "profile": "web|expo|backend|library|unknown",
       "status": "pending",
       "retry_count": 0,
-      "verification": ["lint", "typecheck", "test"]
+      "verification": ["lint", "typecheck", "test"],
+      "branch": "",
+      "review_status": "pending",
+      "pr_number": null,
+      "pr_url": "",
+      "merge_status": "not_requested"
     }
   ]
 }
@@ -53,10 +58,15 @@ programmatically without re-parsing markdown.
 - `priority` — integer, 1 = highest; derive from spec ordering or explicit priority
 - `dependencies` — list of `id` values this item must wait on; omit if none
 - `profile` — detect from the spec or constitution; default to `unknown`
-- `status` — always `"pending"` on first write; build mode updates to `"done"`
+- `status` — always `"pending"` on first write; build mode moves items through
+  `in_progress` -> `awaiting_merge` -> `done`
 - `retry_count` — always `0` on first write; build mode increments on failed attempts
 - `verification` — list of check types required; use any subset of:
   `lint`, `typecheck`, `test`, `e2e`, `build`, `expo-doctor`, `smoke`
+- `branch` — start as an empty string; build mode assigns the per-task branch
+- `review_status` — start as `"pending"`; build mode updates after implementation
+- `pr_number` / `pr_url` — start empty; build mode fills these when a draft PR is opened
+- `merge_status` — start as `"not_requested"`; build mode updates to `"pending"` and finally `"merged"`
 
 When the plan is complete, output `<promise>DONE</promise>`.
 If planning cannot proceed without human intervention, use:

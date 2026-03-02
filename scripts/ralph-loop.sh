@@ -38,14 +38,23 @@ NC='\033[0m'
 mkdir -p "$LOG_DIR"
 source "$SCRIPT_DIR/lib/prompt_builder.sh"
 source "$SCRIPT_DIR/lib/runtime_helpers.sh"
+source "$SCRIPT_DIR/lib/work_items.sh"
+source "$SCRIPT_DIR/lib/release_workflow.sh"
 source "$SCRIPT_DIR/lib/provider_adapters.sh"
 source "$SCRIPT_DIR/lib/preflight.sh"
 source "$SCRIPT_DIR/lib/verification_profiles.sh"
 source "$SCRIPT_DIR/lib/circuit_breaker.sh"
 source "$SCRIPT_DIR/lib/nr_of_tries.sh"
 source "$SCRIPT_DIR/lib/speckit_runner.sh"
+source "$SCRIPT_DIR/lib/observability.sh"
 CB_STATE_FILE="$PROJECT_DIR/.circuit_breaker_state"
 reset_plan_mode_state
+
+# Session-level observability tracking
+SESSION_START_TIME=0
+DONE_COUNT=0
+NO_SIGNAL_COUNT=0
+FAILED_COUNT=0
 
 YOLO_ENABLED=true
 if [[ -f "$CONSTITUTION" ]]; then
@@ -85,85 +94,6 @@ Notes:
 EOF
 }
 
-print_latest_output() {
-    local log_file="$1"
-    local label="$2"
-    local target="/dev/tty"
-
-    [ -f "$log_file" ] || return 0
-
-    if [ ! -w "$target" ]; then
-        target="/dev/stdout"
-    fi
-
-    if [ "$target" = "/dev/tty" ] && [ "$TAIL_RENDERED_LINES" -gt 0 ]; then
-        printf "\033[%dA\033[J" "$TAIL_RENDERED_LINES" > "$target"
-    fi
-
-    {
-        echo "Latest ${label} output (last ${TAIL_LINES} lines):"
-        tail -n "$TAIL_LINES" "$log_file"
-    } > "$target"
-
-    if [ "$target" = "/dev/tty" ]; then
-        TAIL_RENDERED_LINES=$((TAIL_LINES + 1))
-    fi
-}
-
-watch_latest_output() {
-    local log_file="$1"
-    local label="$2"
-    local target="/dev/tty"
-    local use_tty=false
-    local use_tput=false
-
-    [ -f "$log_file" ] || return 0
-
-    if [ ! -w "$target" ]; then
-        target="/dev/stdout"
-    else
-        use_tty=true
-        if command -v tput &>/dev/null; then
-            use_tput=true
-        fi
-    fi
-
-    if [ "$use_tty" = true ]; then
-        if [ "$use_tput" = true ]; then
-            tput cr > "$target"
-            tput sc > "$target"
-        else
-            printf "\r\0337" > "$target"
-        fi
-    fi
-
-    while true; do
-        local timestamp
-        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-
-        if [ "$use_tty" = true ]; then
-            if [ "$use_tput" = true ]; then
-                tput rc > "$target"
-                tput ed > "$target"
-                tput cr > "$target"
-            else
-                printf "\0338\033[J\r" > "$target"
-            fi
-        fi
-
-        {
-            echo -e "${CYAN}[$timestamp] Latest ${label} output (last ${ROLLING_OUTPUT_LINES} lines):${NC}"
-            if [ ! -s "$log_file" ]; then
-                echo "(no output yet)"
-            else
-                tail -n "$ROLLING_OUTPUT_LINES" "$log_file" 2>/dev/null || true
-            fi
-            echo ""
-        } > "$target"
-
-        sleep "$ROLLING_OUTPUT_INTERVAL"
-    done
-}
 
 RAW_ARGS=("$@")
 SANITIZED_ARGS=()
@@ -241,7 +171,10 @@ fi
 
 configure_runtime "$RUNTIME" "$MODEL_OVERRIDE" || exit 1
 
-SESSION_LOG="$LOG_DIR/${RUNTIME_SESSION_PREFIX}_${MODE}_session_$(date '+%Y%m%d_%H%M%S').log"
+SESSION_TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+SESSION_LOG="$LOG_DIR/${RUNTIME_SESSION_PREFIX}_${MODE}_session_${SESSION_TIMESTAMP}.log"
+SUMMARY_LOG="$LOG_DIR/${RUNTIME_SESSION_PREFIX}_${MODE}_summary_${SESSION_TIMESTAMP}.log"
+SESSION_START_TIME=$(date +%s)
 exec > >(tee -a "$SESSION_LOG") 2>&1
 
 validate_runtime_requirements || exit 1
@@ -276,6 +209,7 @@ if [ ! -f "$PROMPT_FILE" ]; then
     echo -e "${RED}Error: failed to build runtime prompt${NC}"
     exit 1
 fi
+BASE_PROMPT_FILE="$PROMPT_FILE"
 
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
 
@@ -306,6 +240,7 @@ echo -e "${BLUE}Prompt:${NC}   $PROMPT_FILE"
 echo -e "${BLUE}Branch:${NC}   $CURRENT_BRANCH"
 echo -e "${YELLOW}YOLO:${NC}     $([ "$YOLO_ENABLED" = true ] && echo "ENABLED" || echo "DISABLED")"
 echo -e "${BLUE}Log:${NC}      $SESSION_LOG"
+echo -e "${BLUE}Summary:${NC}  $SUMMARY_LOG"
 [ $MAX_ITERATIONS -gt 0 ] && echo -e "${BLUE}Max:${NC}      $MAX_ITERATIONS iterations"
 if [ "$MODE" = "plan" ]; then
     echo -e "${BLUE}Plan input:${NC} $PLAN_INPUT_KIND"
@@ -361,6 +296,8 @@ while true; do
 
     ITERATION=$((ITERATION + 1))
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    ITER_START_TIME=$(date +%s)
+    TAIL_RENDERED_LINES=0
 
     echo ""
     echo -e "${PURPLE}════════════════════ LOOP $ITERATION ════════════════════${NC}"
@@ -370,6 +307,8 @@ while true; do
     LOG_FILE="$LOG_DIR/${RUNTIME_ITER_PREFIX}_${MODE}_iter_${ITERATION}_$(date '+%Y%m%d_%H%M%S').log"
     : > "$LOG_FILE"
     WATCH_PID=""
+    ITERATION_PROMPT_FILE="$BASE_PROMPT_FILE"
+    reset_active_work_item
 
     # Stuck-loop protection: halt if circuit breaker is open
     if ! can_execute; then
@@ -378,14 +317,44 @@ while true; do
         exit $EXIT_PROVIDER_ERROR
     fi
 
+    if [[ "$MODE" = "build" && "$HAS_WORK_ITEMS" = true ]]; then
+        reconcile_merged_pull_requests "$PROJECT_DIR"
+
+        if find_awaiting_merge_item "$PROJECT_DIR"; then
+            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH" "$ACTIVE_WORK_ITEM_PR_NUMBER" "$ACTIVE_WORK_ITEM_PR_URL"
+            exit $EXIT_AWAITING_MERGE
+        fi
+
+        if select_next_work_item "$PROJECT_DIR"; then
+            ACTIVE_WORK_ITEM_BRANCH=$(ensure_work_item_branch "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH") || exit 1
+            mark_work_item_in_progress "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_BRANCH"
+            set_active_work_item_by_id "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" || true
+
+            ITERATION_PROMPT_FILE="$LOG_DIR/${RUNTIME_ITER_PREFIX}_${MODE}_prompt_${ITERATION}_$(date '+%Y%m%d_%H%M%S').md"
+            cp "$BASE_PROMPT_FILE" "$ITERATION_PROMPT_FILE"
+            render_active_work_item_context >> "$ITERATION_PROMPT_FILE"
+
+            CURRENT_BRANCH="$ACTIVE_WORK_ITEM_BRANCH"
+            echo -e "${BLUE}Work item:${NC} $ACTIVE_WORK_ITEM_ID — $ACTIVE_WORK_ITEM_TITLE"
+            echo -e "${BLUE}Task branch:${NC} $ACTIVE_WORK_ITEM_BRANCH"
+            echo ""
+        else
+            echo -e "${GREEN}All work-items are complete.${NC}"
+            break
+        fi
+    fi
+
     GIT_HASH_BEFORE=$(git rev-parse HEAD 2>/dev/null || echo "none")
 
     if [ "$ROLLING_OUTPUT_INTERVAL" -gt 0 ] && [ "$ROLLING_OUTPUT_LINES" -gt 0 ] && [ -t 1 ] && [ -w /dev/tty ]; then
-        watch_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME" &
+        watch_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME" "$ITERATION" "$MAX_ITERATIONS" "$ITER_START_TIME" &
         WATCH_PID=$!
     fi
 
-    if run_runtime_command "$PROMPT_FILE" "$LOG_FILE" "$LOG_DIR" "$MODE" "$ITERATION" "$YOLO_ENABLED"; then
+    ITER_STATUS="FAILED"
+    ITER_SIGNAL_DETAIL=""
+
+    if run_runtime_command "$ITERATION_PROMPT_FILE" "$LOG_FILE" "$LOG_DIR" "$MODE" "$ITERATION" "$YOLO_ENABLED"; then
         if [ -n "$WATCH_PID" ]; then
             kill "$WATCH_PID" 2>/dev/null || true
             wait "$WATCH_PID" 2>/dev/null || true
@@ -406,7 +375,13 @@ while true; do
             echo -e "${GREEN}✓ Completion signal detected: ${DETECTED_SIGNAL}${NC}"
             echo -e "${GREEN}✓ Task completed successfully!${NC}"
             CONSECUTIVE_FAILURES=0
+            ITER_STATUS="$LAST_PROMISE_SIGNAL"
+            DONE_COUNT=$((DONE_COUNT + 1))
             record_loop_result "$ITERATION" "$ITER_FILES_CHANGED" "false"
+
+            ITER_DURATION=$(($(date +%s) - ITER_START_TIME))
+            print_iter_summary "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED"
+            append_iter_to_summary_log "$SUMMARY_LOG" "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED"
 
             if [ "$MODE" = "plan" ]; then
                 echo ""
@@ -415,10 +390,49 @@ while true; do
                 echo -e "${CYAN}Or delete IMPLEMENTATION_PLAN.md to work directly from specs.${NC}"
                 break
             fi
+
+            if [[ "$MODE" = "build" ]]; then
+                RELEASE_BRANCH=$(git branch --show-current 2>/dev/null || echo "$CURRENT_BRANCH")
+                push_branch_if_needed "$RELEASE_BRANCH"
+
+                if [[ -n "$ACTIVE_WORK_ITEM_ID" ]]; then
+                    PR_TITLE=$(build_pull_request_title "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_TITLE")
+                    PR_BODY=$(build_pull_request_body "$ACTIVE_WORK_ITEM_ID" "$ACTIVE_WORK_ITEM_TITLE" "$ACTIVE_WORK_ITEM_SPEC" "$ACTIVE_WORK_ITEM_TASKS")
+
+                    PR_INFO=""
+                    if PR_INFO=$(ensure_draft_pull_request "$PROJECT_DIR" "$RELEASE_BRANCH" "$PR_TITLE" "$PR_BODY"); then
+                        IFS=$'\t' read -r PR_NUMBER PR_URL PR_STATUS <<< "$PR_INFO"
+                        if [[ "$PR_STATUS" = "merged" ]]; then
+                            mark_work_item_done "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID"
+                            echo -e "${GREEN}✓ Pull request for $ACTIVE_WORK_ITEM_ID is already merged.${NC}"
+                        else
+                            mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_URL" "$PR_NUMBER"
+                            print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH" "$PR_NUMBER" "$PR_URL"
+                            exit $EXIT_AWAITING_MERGE
+                        fi
+                    else
+                        echo -e "${YELLOW}Warning: could not create or inspect a draft pull request automatically.${NC}"
+                        echo -e "${YELLOW}The branch has been pushed. Open and merge a PR manually, then rerun the loop from the base branch.${NC}"
+                        mark_work_item_awaiting_merge "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
+                        print_awaiting_merge_message "$ACTIVE_WORK_ITEM_ID" "$RELEASE_BRANCH"
+                        exit $EXIT_AWAITING_MERGE
+                    fi
+                fi
+            fi
         elif [[ "$LAST_PROMISE_SIGNAL" = "BLOCKED" ]]; then
+            ITER_STATUS="BLOCKED"
+            ITER_SIGNAL_DETAIL="$LAST_PROMISE_PAYLOAD"
+            ITER_DURATION=$(($(date +%s) - ITER_START_TIME))
+            print_iter_summary "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED" "$ITER_SIGNAL_DETAIL"
+            append_iter_to_summary_log "$SUMMARY_LOG" "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED"
             print_blocked_signal "$RUNTIME_SHORT_NAME" "$LAST_PROMISE_PAYLOAD"
             exit $EXIT_BLOCKED
         elif [[ "$LAST_PROMISE_SIGNAL" = "DECIDE" ]]; then
+            ITER_STATUS="DECIDE"
+            ITER_SIGNAL_DETAIL="$LAST_PROMISE_PAYLOAD"
+            ITER_DURATION=$(($(date +%s) - ITER_START_TIME))
+            print_iter_summary "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED" "$ITER_SIGNAL_DETAIL"
+            append_iter_to_summary_log "$SUMMARY_LOG" "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED"
             print_decide_signal "$RUNTIME_SHORT_NAME" "$LAST_PROMISE_PAYLOAD"
             exit $EXIT_DECIDE
         else
@@ -427,6 +441,8 @@ while true; do
             echo -e "${YELLOW}  This means acceptance criteria were not met.${NC}"
             echo -e "${YELLOW}  Retrying in next iteration...${NC}"
             CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            ITER_STATUS="NO_SIGNAL"
+            NO_SIGNAL_COUNT=$((NO_SIGNAL_COUNT + 1))
             print_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME"
 
             # Update per-spec attempt tracking for any spec files touched this iteration
@@ -443,7 +459,14 @@ while true; do
                     done <<< "$TOUCHED_SPECS"
                 fi
             fi
+            if [[ -n "$ACTIVE_WORK_ITEM_ID" ]]; then
+                increment_work_item_retry_count "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" || true
+            fi
             record_loop_result "$ITERATION" "$ITER_FILES_CHANGED" "false"
+
+            ITER_DURATION=$(($(date +%s) - ITER_START_TIME))
+            print_iter_summary "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED"
+            append_iter_to_summary_log "$SUMMARY_LOG" "$ITERATION" "$ITER_STATUS" "$ITER_DURATION" "$ITER_FILES_CHANGED"
 
             if [ $CONSECUTIVE_FAILURES -ge $MAX_CONSECUTIVE_FAILURES ]; then
                 echo ""
@@ -471,6 +494,7 @@ while true; do
             echo -e "${YELLOW}Check output: $RUNTIME_OUTPUT_FILE${NC}"
         fi
         CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+        FAILED_COUNT=$((FAILED_COUNT + 1))
         print_latest_output "$LOG_FILE" "$RUNTIME_SHORT_NAME"
 
         GIT_HASH_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "none")
@@ -478,17 +502,21 @@ while true; do
         if [[ "$GIT_HASH_BEFORE" != "$GIT_HASH_AFTER" ]]; then
             ITER_FILES_CHANGED=$(git diff --name-only "$GIT_HASH_BEFORE" "$GIT_HASH_AFTER" 2>/dev/null | wc -l | tr -d ' ')
         fi
+        if [[ -n "$ACTIVE_WORK_ITEM_ID" ]]; then
+            increment_work_item_retry_count "$PROJECT_DIR" "$ACTIVE_WORK_ITEM_ID" || true
+        fi
         record_loop_result "$ITERATION" "$ITER_FILES_CHANGED" "true"
-    fi
 
-    push_branch_if_needed "$CURRENT_BRANCH"
+        ITER_DURATION=$(($(date +%s) - ITER_START_TIME))
+        print_iter_summary "$ITERATION" "FAILED" "$ITER_DURATION" "$ITER_FILES_CHANGED"
+        append_iter_to_summary_log "$SUMMARY_LOG" "$ITERATION" "FAILED" "$ITER_DURATION" "$ITER_FILES_CHANGED"
+    fi
 
     echo ""
     echo -e "${BLUE}Waiting 2s before next iteration...${NC}"
     sleep 2
 done
 
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN} RALPH LOOP (${RUNTIME_LABEL}) FINISHED ($ITERATION iterations) ${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+SESSION_DURATION=$(($(date +%s) - SESSION_START_TIME))
+print_session_summary "$ITERATION" "$SESSION_DURATION" "$DONE_COUNT" "$NO_SIGNAL_COUNT" "$FAILED_COUNT" "$RUNTIME_LABEL"
+echo -e "${BLUE}Summary log:${NC} $SUMMARY_LOG"
