@@ -82,6 +82,10 @@ The agent outputs `<promise>DONE</promise>` **ONLY** when:
 
 The bash loop checks for this phrase. If not found, it retries.
 
+Additional runtime signals:
+- `<promise>BLOCKED:reason</promise>` when human help is required
+- `<promise>DECIDE:question</promise>` when a human decision is required
+
 ---
 
 ## Two Modes
@@ -89,7 +93,7 @@ The bash loop checks for this phrase. If not found, it retries.
 | Mode | Purpose | Command |
 |------|---------|---------|
 | **build** (default) | Pick spec/task, implement, test, commit | `./scripts/ralph-loop.sh` |
-| **plan** (optional) | Create detailed task breakdown from specs | `./scripts/ralph-loop.sh plan` |
+| **plan** (optional) | Orchestrate SpecKit planning from a PRD, notes, or existing specs | `./scripts/ralph-loop.sh plan` |
 
 ### Planning is OPTIONAL
 
@@ -98,7 +102,15 @@ Most projects work fine **directly from specs**. The agent simply:
 2. Picks the highest priority incomplete spec
 3. Implements it completely
 
-Only use `plan` mode when you want a detailed breakdown of specs into smaller tasks.
+Use `plan` mode when you want Ralph to orchestrate the SpecKit planning pipeline:
+1. Accept a detailed PRD, informal notes, or existing repo context
+2. Normalize notes into a PRD when needed
+3. Decompose that input into feature-sized specs
+4. Run the canonical order for each feature:
+   `speckit-specify -> speckit-clarify (if needed) -> speckit-plan -> speckit-tasks`
+5. Aggregate the results into `IMPLEMENTATION_PLAN.md`
+6. Prefer the vendored in-repo SpecKit skill copies; fall back to project-local or
+   user-global installs only when the vendored copies are unavailable
 
 **Tip:** Delete `IMPLEMENTATION_PLAN.md` to return to working directly from specs.
 
@@ -110,16 +122,19 @@ Only use `plan` mode when you want a detailed breakdown of specs into smaller ta
 
 Point your AI agent to this repo and say:
 
-> "Set up Ralph Wiggum in my project using https://github.com/fstandhartinger/ralph-wiggum"
+> "Set up Ralph Wiggum in my project using https://github.com/tolulawson/ralph-wiggum"
 
 The agent will read [INSTALLATION.md](INSTALLATION.md) and guide you through a **lightweight, pleasant setup**:
 
-1. **Quick Setup** (~1 min) — Create directories, download scripts
+1. **Quick Setup** (~1-2 min) — Create directories and install the full harness
 2. **Project Interview** (~3-5 min) — Focus on your **vision and goals**, not technical minutiae
 3. **Constitution** — Create a guiding document for all future sessions
 4. **Next Steps** — Clear guidance on creating specs and starting Ralph
 
 The interview prioritizes understanding *what you're building and why* over interrogating you about tech stack details. For existing projects, the agent can detect your stack automatically.
+The guided install now copies the complete local harness:
+`scripts/ralph-loop.sh`, `scripts/lib/*.sh`, `templates/`, and the vendored
+SpecKit planning assets under `vendor/speckit-agent-skills/`.
 
 ### Manual Setup
 
@@ -148,15 +163,27 @@ This creates `specs/001-user-auth/spec.md` with:
 
 ```bash
 ./scripts/ralph-loop.sh plan
+./scripts/ralph-loop.sh --runtime codex plan
+./scripts/ralph-loop.sh plan --prd docs/PRD.md
+./scripts/ralph-loop.sh plan --notes docs/ideas.md
+./scripts/ralph-loop.sh plan --brief "Build an Expo app for field sales"
 ```
 
-Creates `IMPLEMENTATION_PLAN.md` with detailed task breakdown. **This step is optional** — most projects work fine directly from specs.
+Creates or updates feature specs plus `IMPLEMENTATION_PLAN.md` by orchestrating the
+SpecKit planning phases. **This step is optional** — most projects still work fine
+directly from specs.
+
+The planning loop now vendors the canonical planning-related SpecKit skill
+definitions under `vendor/speckit-agent-skills/skills/`, so planning remains
+deterministic even when the machine does not have SpecKit installed globally.
 
 ### 3. Run Build Mode
 
 ```bash
 ./scripts/ralph-loop.sh        # Unlimited iterations
 ./scripts/ralph-loop.sh 20     # Max 20 iterations
+./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
+./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2
 ```
 
 Each iteration:
@@ -173,7 +200,7 @@ Every loop run writes **all output** to log files in `logs/`:
 
 - **Session log:** `logs/ralph_*_session_YYYYMMDD_HHMMSS.log` (entire run, including CLI output)
 - **Iteration logs:** `logs/ralph_*_iter_N_YYYYMMDD_HHMMSS.log` (per-iteration CLI output)
-- **Codex last message:** `logs/ralph_codex_output_iter_N_*.txt`
+- **Codex last message:** `logs/ralph_codex_output_iter_N_*.txt` (only when `--runtime codex` is used)
 
 If something gets stuck, these logs contain the full verbose trace.
 
@@ -221,11 +248,13 @@ On each spec completion, entries are created in `completion_log/`:
 
 These provide a visual history of what was built.
 
-### Using Codex Instead
+### Selecting a Runtime
 
 ```bash
-./scripts/ralph-loop-codex.sh plan
-./scripts/ralph-loop-codex.sh
+./scripts/ralph-loop.sh --runtime claude
+./scripts/ralph-loop.sh --runtime codex
+./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
+./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2
 ```
 
 ---
@@ -240,10 +269,7 @@ project/
 ├── specs/
 │   └── NNN-feature-name.md       # Feature specifications
 ├── scripts/
-│   ├── ralph-loop.sh             # Claude Code loop
-│   ├── ralph-loop-codex.sh       # OpenAI Codex loop
-│   ├── ralph-loop-gemini.sh      # Google Gemini loop
-│   └── ralph-loop-copilot.sh     # GitHub Copilot loop
+│   └── ralph-loop.sh             # Unified loop entrypoint
 ├── AGENTS.md                     # Points to constitution
 └── CLAUDE.md                     # Points to constitution
 ```

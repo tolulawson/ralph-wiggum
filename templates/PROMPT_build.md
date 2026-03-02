@@ -6,4 +6,8 @@ Read `.specify/memory/constitution.md` — it contains all project principles, w
 instructions, work sources, and completion signal requirements.
 
 Find the highest-priority incomplete work item, implement it completely, verify all
-acceptance criteria, commit and push, then output `<promise>DONE</promise>`.
+acceptance criteria, commit and push, then:
+
+- output `<promise>DONE</promise>` when the work item is complete
+- output `<promise>BLOCKED:reason</promise>` when a real blocker requires human help
+- output `<promise>DECIDE:question</promise>` when a human decision is required

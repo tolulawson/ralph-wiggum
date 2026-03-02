@@ -42,6 +42,10 @@ Specs are numbered: `001-xxx`, `002-xxx`, etc.
 Only if you need detailed task breakdown:
 ```bash
 ./scripts/ralph-loop.sh plan
+./scripts/ralph-loop.sh plan --prd docs/PRD.md
+./scripts/ralph-loop.sh plan --notes docs/ideas.md
 ```
 
 **Most projects don't need this** — specs are the plan.
+When you do use it, Ralph should orchestrate the SpecKit phases in order:
+`speckit-specify -> speckit-clarify -> speckit-plan -> speckit-tasks`.

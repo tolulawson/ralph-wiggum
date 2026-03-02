@@ -8,7 +8,7 @@
 
 ## Overview: What You'll Do
 
-1. **Quick Setup** — Create directories and download scripts (1 minute)
+1. **Quick Setup** — Create directories and install the full Ralph harness (1-2 minutes)
 2. **Project Interview** — Learn about the user's project vision (3-5 minutes)
 3. **Constitution** — Create the project's guiding document
 4. **Next Steps** — Explain how to create specs and start Ralph
@@ -20,32 +20,55 @@ The goal: Make this feel **lightweight, pleasant, and professional**. Focus on u
 ## Phase 1: Create Structure
 
 ```bash
-mkdir -p .specify/memory specs scripts logs history completion_log .cursor/commands .claude/commands
+mkdir -p .specify/memory specs scripts scripts/lib templates vendor logs history completion_log .cursor/commands .claude/commands
 ```
 
 ---
 
-## Phase 2: Download Scripts
+## Phase 2: Install The Full Harness
 
-Fetch from GitHub raw URLs:
+Clone this repository to a temporary directory, then copy the runtime assets into
+the user's project. Do **not** install only `scripts/ralph-loop.sh` anymore; the
+loop now depends on helper libraries, prompt templates, and vendored planning assets.
 
-| Script | URL | Save To |
-|--------|-----|---------|
-| ralph-loop.sh | `https://raw.githubusercontent.com/fstandhartinger/ralph-wiggum/main/scripts/ralph-loop.sh` | `scripts/ralph-loop.sh` |
-| ralph-loop-codex.sh | `https://raw.githubusercontent.com/fstandhartinger/ralph-wiggum/main/scripts/ralph-loop-codex.sh` | `scripts/ralph-loop-codex.sh` |
-| ralph-loop-gemini.sh | `https://raw.githubusercontent.com/fstandhartinger/ralph-wiggum/main/scripts/ralph-loop-gemini.sh` | `scripts/ralph-loop-gemini.sh` |
-| ralph-loop-copilot.sh | `https://raw.githubusercontent.com/fstandhartinger/ralph-wiggum/main/scripts/ralph-loop-copilot.sh` | `scripts/ralph-loop-copilot.sh` |
+If the user explicitly told you to set Ralph up using a specific repository URL,
+use that exact URL. Otherwise, default to this repository:
 
 ```bash
-chmod +x scripts/ralph-loop*.sh
+RALPH_REPO_URL="https://github.com/tolulawson/ralph-wiggum.git"
+RALPH_BOOTSTRAP_DIR="$(mktemp -d)"
+
+git clone --depth 1 "$RALPH_REPO_URL" "$RALPH_BOOTSTRAP_DIR/repo"
+
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/ralph-loop.sh" scripts/ralph-loop.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/prompt_builder.sh" scripts/lib/prompt_builder.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/runtime_helpers.sh" scripts/lib/runtime_helpers.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/provider_adapters.sh" scripts/lib/provider_adapters.sh
+
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_build.md" templates/PROMPT_build.md
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_plan.md" templates/PROMPT_plan.md
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/AGENTS.md" templates/AGENTS.md
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/constitution-template.md" templates/constitution-template.md
+
+rm -rf vendor/speckit-agent-skills
+cp -R "$RALPH_BOOTSTRAP_DIR/repo/vendor/speckit-agent-skills" vendor/speckit-agent-skills
+
+chmod +x scripts/ralph-loop.sh
+
+rm -rf "$RALPH_BOOTSTRAP_DIR"
 ```
+
+After this step, the project has the complete local harness needed for:
+- unified runtime selection via `--runtime`
+- template-backed prompt generation
+- deterministic planning via the vendored SpecKit planning assets
 
 ---
 
 ## Phase 3: Get Version Info
 
 ```bash
-git ls-remote https://github.com/fstandhartinger/ralph-wiggum.git HEAD | cut -f1
+git ls-remote https://github.com/tolulawson/ralph-wiggum.git HEAD | cut -f1
 ```
 
 Store the commit hash for the constitution.
@@ -162,11 +185,13 @@ The constitution must be **concise**. It's the single source of truth — the ag
 
 ## Context Detection
 
-**Ralph Loop Mode** (started by ralph-loop*.sh):
+**Ralph Loop Mode** (started by `./scripts/ralph-loop.sh`):
 - Pick highest priority incomplete spec from `specs/`
 - Implement, test, commit, push
 - Output `<promise>DONE</promise>` only when 100% complete
 - Output `<promise>ALL_DONE</promise>` when no work remains
+- Output `<promise>BLOCKED:reason</promise>` when human help is required
+- Output `<promise>DECIDE:question</promise>` when a human decision is required
 
 **Interactive Mode** (normal conversation):
 - Be helpful, guide decisions, create specs
@@ -217,6 +242,9 @@ Append a 1-line summary to `history.md` after each spec completion. For details,
 ## Completion Signal
 
 All acceptance criteria verified, tests pass, changes committed and pushed → output `<promise>DONE</promise>`. Never output this until truly complete.
+
+If human help is required, output `<promise>BLOCKED:reason</promise>`.
+If a human decision is required, output `<promise>DECIDE:question</promise>`.
 ```
 
 ### Optional Sections (add to constitution only if user opted in)
@@ -295,9 +323,9 @@ Same content as AGENTS.md.
 | Task | Command |
 |------|---------|
 | Start building | `./scripts/ralph-loop.sh` |
-| Use Codex | `./scripts/ralph-loop-codex.sh` |
-| Use Gemini | `./scripts/ralph-loop-gemini.sh` |
-| Use Copilot | `./scripts/ralph-loop-copilot.sh` |
+| Use Codex | `./scripts/ralph-loop.sh --runtime codex` |
+| Use Gemini | `./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro` |
+| Use Copilot | `./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2` |
 | Limit iterations | `./scripts/ralph-loop.sh 20` |
 
 Ready to create your first specification?

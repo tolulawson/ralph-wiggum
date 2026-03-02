@@ -4,9 +4,11 @@
 
 Just tell your AI assistant:
 
-> "Set up Ralph Wiggum in this project using https://github.com/fstandhartinger/ralph-wiggum"
+> "Set up Ralph Wiggum in this project using https://github.com/tolulawson/ralph-wiggum"
 
 The AI will read [INSTALLATION.md](INSTALLATION.md) and guide you through an interactive setup.
+That setup now installs the full harness: the unified loop, helper libraries,
+prompt templates, and vendored planning assets.
 
 ---
 
@@ -20,24 +22,43 @@ If you prefer to install manually:
 mkdir -p .specify/memory
 mkdir -p specs
 mkdir -p scripts
+mkdir -p scripts/lib
+mkdir -p templates
+mkdir -p vendor
 mkdir -p logs
 mkdir -p history
+mkdir -p completion_log
 mkdir -p .cursor/commands
+mkdir -p .claude/commands
 ```
 
-### 2. Download Scripts
+### 2. Install The Full Harness
 
 ```bash
-# Download ralph-loop.sh for Claude Code
-curl -o scripts/ralph-loop.sh \
-  https://raw.githubusercontent.com/fstandhartinger/ralph-wiggum/main/scripts/ralph-loop.sh
+# Replace this URL if you want to install from a different Ralph fork.
+RALPH_REPO_URL="https://github.com/tolulawson/ralph-wiggum.git"
+RALPH_BOOTSTRAP_DIR="$(mktemp -d)"
 
-# Download ralph-loop-codex.sh for Codex
-curl -o scripts/ralph-loop-codex.sh \
-  https://raw.githubusercontent.com/fstandhartinger/ralph-wiggum/main/scripts/ralph-loop-codex.sh
+git clone --depth 1 "$RALPH_REPO_URL" "$RALPH_BOOTSTRAP_DIR/repo"
 
-# Make executable
-chmod +x scripts/ralph-loop.sh scripts/ralph-loop-codex.sh
+mkdir -p scripts/lib templates vendor
+
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/ralph-loop.sh" scripts/ralph-loop.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/prompt_builder.sh" scripts/lib/prompt_builder.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/runtime_helpers.sh" scripts/lib/runtime_helpers.sh
+cp "$RALPH_BOOTSTRAP_DIR/repo/scripts/lib/provider_adapters.sh" scripts/lib/provider_adapters.sh
+
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_build.md" templates/PROMPT_build.md
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/PROMPT_plan.md" templates/PROMPT_plan.md
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/AGENTS.md" templates/AGENTS.md
+cp "$RALPH_BOOTSTRAP_DIR/repo/templates/constitution-template.md" templates/constitution-template.md
+
+rm -rf vendor/speckit-agent-skills
+cp -R "$RALPH_BOOTSTRAP_DIR/repo/vendor/speckit-agent-skills" vendor/speckit-agent-skills
+
+chmod +x scripts/ralph-loop.sh
+
+rm -rf "$RALPH_BOOTSTRAP_DIR"
 ```
 
 ### 3. Create Constitution
@@ -62,7 +83,7 @@ Create `.specify/memory/constitution.md` with your project details:
 ### Context A: Ralph Loop (Implementation Mode)
 
 You are in a Ralph loop if:
-- Started by `ralph-loop.sh` or `ralph-loop-codex.sh`
+- Started by `./scripts/ralph-loop.sh`
 - Prompt mentions "implement spec"
 
 **In this mode:**
@@ -104,7 +125,9 @@ Build exactly what's needed, nothing more.
 ```bash
 ./scripts/ralph-loop.sh           # Build mode
 ./scripts/ralph-loop.sh 20        # Max 20 iterations
-./scripts/ralph-loop-codex.sh     # Use Codex instead
+./scripts/ralph-loop.sh --runtime codex
+./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
+./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2
 ```
 
 ---

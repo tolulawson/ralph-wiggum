@@ -62,12 +62,12 @@ For full Ralph Wiggum setup with constitution and interview:
 
 ```bash
 # Tell your AI agent:
-"Set up Ralph Wiggum using https://github.com/fstandhartinger/ralph-wiggum"
+"Set up Ralph Wiggum using https://github.com/tolulawson/ralph-wiggum"
 ```
 
 The agent will guide you through a **lightweight, pleasant setup**:
 
-1. **Quick Setup** (~1 min) — Create directories, download scripts
+1. **Quick Setup** (~1-2 min) — Create directories and install the full harness
 2. **Project Interview** — Focus on your **vision and goals** (not tech details)
 3. **Constitution** — Create a guiding document for all sessions
 4. **Next Steps** — Clear guidance on creating specs and starting Ralph
@@ -140,8 +140,10 @@ The more specific your acceptance criteria, the better Ralph performs.
 # With max iterations
 ./scripts/ralph-loop.sh 20
 
-# Using Codex CLI
-./scripts/ralph-loop-codex.sh
+# Using another runtime
+./scripts/ralph-loop.sh --runtime codex
+./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
+./scripts/ralph-loop.sh --runtime copilot --model gpt-5.2
 ```
 
 ### Logging (All Output Captured)

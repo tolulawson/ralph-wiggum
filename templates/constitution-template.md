@@ -78,6 +78,8 @@ AI coding agents work autonomously:
 - **YOLO Mode**: [ENABLED/DISABLED]
   - Claude: `--dangerously-skip-permissions`
   - Codex: `--dangerously-bypass-approvals-and-sandbox`
+  - Gemini: `--yolo`
+  - Copilot: `--allow-all-tools`
 - **Git Autonomy**: [ENABLED/DISABLED]
 
 ### Work Item Source
@@ -89,8 +91,13 @@ AI coding agents work autonomously:
 
 ### Ralph Loop Scripts
 Located in `scripts/`:
-- `ralph-loop.sh` — Claude Code loop
-- `ralph-loop-codex.sh` — OpenAI Codex loop
+- `ralph-loop.sh` — Unified Ralph loop entrypoint
+
+Supported runtimes:
+- `claude`
+- `codex`
+- `gemini`
+- `copilot`
 
 **Usage:**
 ```bash
@@ -100,6 +107,8 @@ Located in `scripts/`:
 # Building: Implement tasks one by one
 ./scripts/ralph-loop.sh        # Unlimited
 ./scripts/ralph-loop.sh 20     # Max 20 iterations
+./scripts/ralph-loop.sh --runtime codex
+./scripts/ralph-loop.sh --runtime gemini --model gemini-2.5-pro
 ```
 
 ---
